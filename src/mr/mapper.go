@@ -33,7 +33,7 @@ func (w *Mapper) initializeEncoders() {
 
 	for i := 0; i < w.nReduce; i++ {
 		fileName := fmt.Sprintf("mr-%v-%v-tmp", w.id, i)
-		tempFile, err := os.CreateTemp(".", fileName)
+		tempFile, err := os.CreateTemp("./inter/", fileName)
 		if err != nil {
 			log.Fatalf("Failed to create temp file: %v", err)
 			return
@@ -71,7 +71,7 @@ func (w *Mapper) finalizeIntermediateFiles() []string {
 	s := make([]string, 0, w.nReduce)
 	for i, tempFileName := range w.tmpFiles {
 		// Name format: mr-X-Y
-		finalName := fmt.Sprintf("mr-%v-%v", w.id, i)
+		finalName := fmt.Sprintf("./inter/mr-%v-%v", w.id, i)
 		err := os.Rename(tempFileName, finalName)
 		if err != nil {
 			log.Fatalf("Failed to atomically rename file: %v", err)
