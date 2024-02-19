@@ -1,16 +1,83 @@
 package mr
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log"
 	"net/rpc"
+	"os"
 )
 
 // Map functions return a slice of KeyValue.
 type KeyValue struct {
 	Key   string
 	Value string
+}
+
+type ByKey []KeyValue
+
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
+
+func getTasks() (TaskReply, error) {
+	args := None{}
+	task := TaskReply{}
+
+	ok := callRpc("Coordinator.GetTask", &args, &task)
+	if !ok {
+		return task, errors.New("error getting task")
+	}
+	return task, nil
+}
+
+// main/mrworker.go calls this function.
+func Worker(mapf func(string, string) []KeyValue,
+	reducef func(string, []string) string) {
+	// send RPC to coordinator asking for task
+	task, err := getTasks()
+	if err != nil {
+		log.Panicln(err)
+		return
+	}
+
+	if task.IsMap {
+		mapper := NewMapper(task)
+		// fmt.Println("mapper started")
+		Mapify(&mapper, mapf, task.Filenames[0])
+		// fmt.Println("mapper finished")
+		// fmt.Printf("Id: %v, FinalFiles: %v\n", mapper.id, mapper.finalFiles)
+		args := MapCompleteArg{Id: mapper.id, FinalFiles: mapper.finalFiles}
+		none := None{}
+
+		// call rpc complete map
+		ok := callRpc("Coordinator.MapTaskCompleted", &args, &none)
+		if !ok {
+			log.Fatalf("error completing map task for mapper %v", mapper.id)
+			return
+		}
+
+	} else {
+		log.Fatal("cannot call reduce worker")
+		// TODO: call Reduce func, reducef
+	}
+
+}
+
+func readFile(filename string) string {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := io.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+
+	return string(content)
 }
 
 // use ihash(key) % NReduce to choose the reduce
@@ -21,42 +88,10 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-// main/mrworker.go calls this function.
-func Worker(mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string) {
-
-	// Your worker implementation here.
-
-	// uncomment to send the Example RPC to the master.
-	// CallExample()
-
-}
-
-// example function to show how to make an RPC call to the master.
-//
-// the RPC argument and reply types are defined in rpc.go.
-func CallExample() {
-
-	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
-
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	call("Master.Example", &args, &reply)
-
-	// reply.Y should be 100.
-	fmt.Printf("reply.Y %v\n", reply.Y)
-}
-
-// send an RPC request to the master, wait for the response.
+// send an RPC request to the coordinator, wait for the response.
 // usually returns true.
 // returns false if something goes wrong.
-func call(rpcname string, args interface{}, reply interface{}) bool {
+func callRpc(rpcname string, args interface{}, reply interface{}) bool {
 	// c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
 	sockname := masterSock()
 	c, err := rpc.DialHTTP("unix", sockname)
