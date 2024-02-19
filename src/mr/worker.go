@@ -73,7 +73,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				return
 			}
 		default:
-			log.Fatalf("no tasktype for task: %v\n", task)
+			fmt.Println("all jobs done")
 			isJob = false
 		}
 		time.Sleep(time.Second)

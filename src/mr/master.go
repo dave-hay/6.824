@@ -118,12 +118,18 @@ func (c *Master) Done() bool {
 // main/mrMaster.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeMaster(files []string, nReduce int) *Master {
-	c := Master{nReduce: nReduce, mapTasks: map[int]Task{}, reduceTasks: map[int]Task{}}
+	mapTasks := map[int]Task{}
+	reduceTasks := map[int]Task{}
 
 	for i, file := range files {
-		c.mapTasks[i] = Task{id: i, taskType: "map", filenames: []string{file}, nReduce: nReduce}
-		c.reduceTasks[i] = Task{id: i, taskType: "reduce", filenames: []string{}, nReduce: nReduce}
+		mapTasks[i] = Task{id: i, taskType: "map", filenames: []string{file}, nReduce: nReduce}
 	}
+
+	for i := range nReduce {
+		reduceTasks[i] = Task{id: i, taskType: "reduce", filenames: []string{}, nReduce: nReduce}
+	}
+
+	c := Master{nReduce: nReduce, mapTasks: mapTasks, reduceTasks: reduceTasks}
 
 	c.server()
 	return &c
