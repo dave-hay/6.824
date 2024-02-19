@@ -26,7 +26,7 @@ func getTasks() (TaskReply, error) {
 	args := None{}
 	task := TaskReply{}
 
-	ok := callRpc("Coordinator.GetTask", &args, &task)
+	ok := callRpc("Master.GetTask", &args, &task)
 	if !ok {
 		return task, errors.New("error getting task")
 	}
@@ -53,7 +53,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		none := None{}
 
 		// call rpc complete map
-		ok := callRpc("Coordinator.MapTaskCompleted", &args, &none)
+		ok := callRpc("Master.MapTaskCompleted", &args, &none)
 		if !ok {
 			log.Fatalf("error completing map task for mapper %v", mapper.id)
 			return
