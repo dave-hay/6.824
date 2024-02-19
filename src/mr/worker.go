@@ -37,33 +37,37 @@ func getTasks() (TaskReply, error) {
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 	// send RPC to coordinator asking for task
-	task, err := getTasks()
-	if err != nil {
-		log.Panicln(err)
-		return
-	}
-
-	if task.IsMap {
-		mapper := NewMapper(task)
-		// fmt.Println("mapper started")
-		Mapify(&mapper, mapf, task.Filenames[0])
-		// fmt.Println("mapper finished")
-		// fmt.Printf("Id: %v, FinalFiles: %v\n", mapper.id, mapper.finalFiles)
-		args := MapCompleteArg{Id: mapper.id, FinalFiles: mapper.finalFiles}
-		none := None{}
-
-		// call rpc complete map
-		ok := callRpc("Master.MapTaskCompleted", &args, &none)
-		if !ok {
-			log.Fatalf("error completing map task for mapper %v", mapper.id)
+	isJob := true
+	for isJob {
+		task, err := getTasks()
+		if err != nil {
+			log.Panicln(err)
 			return
 		}
+		switch task.TaskType {
+		case "map":
+			mapper := NewMapper(task)
+			// fmt.Println("mapper started")
+			Mapify(&mapper, mapf, task.Filenames[0])
+			// fmt.Println("mapper finished")
+			// fmt.Printf("Id: %v, FinalFiles: %v\n", mapper.id, mapper.finalFiles)
+			args := MapCompleteArg{Id: mapper.id, FinalFiles: mapper.finalFiles}
+			none := None{}
 
-	} else {
-		log.Fatal("cannot call reduce worker")
-		// TODO: call Reduce func, reducef
+			// call rpc complete map
+			ok := callRpc("Master.MapTaskCompleted", &args, &none)
+			if !ok {
+				log.Fatalf("error completing map task for mapper %v", mapper.id)
+				return
+			}
+		case "reduce":
+
+			// TODO: call Reduce func, reducef
+			log.Fatal("cannot call reduce worker")
+		default:
+			isJob = false
+		}
 	}
-
 }
 
 func readFile(filename string) string {

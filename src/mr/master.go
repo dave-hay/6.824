@@ -16,22 +16,25 @@ type Master struct {
 
 type Task struct {
 	id        int
-	isMap     bool
 	nReduce   int
 	filenames []string
 	inProcess bool
+	taskType  string
 	// isComplete bool // when done just delete?
 }
 
 // Your code here -- RPC handlers for the worker to call.
-
 func (c *Master) GetTask(args *None, reply *TaskReply) error {
-	if len(c.mapTasks) == 0 {
-		// TODO: reduce tasks
+	mapTasks, reduceTasks := len(c.mapTasks), len(c.reduceTasks)
+
+	if mapTasks == 0 && reduceTasks == 0 {
+
+	} else if mapTasks == 0 {
+		// TODO: reduce
 	} else {
-		reply.IsMap = true
 		for _, task := range c.mapTasks {
 			if !task.inProcess {
+				reply.TaskType = task.taskType
 				reply.Filenames = task.filenames
 				reply.NReduce = task.nReduce
 				reply.Id = task.id
@@ -76,8 +79,8 @@ func MakeMaster(files []string, nReduce int) *Master {
 	c := Master{nReduce: nReduce, mapTasks: map[int]Task{}, reduceTasks: map[int]Task{}}
 
 	for i, file := range files {
-		c.mapTasks[i] = Task{id: i, isMap: true, filenames: []string{file}, nReduce: nReduce}
-		c.reduceTasks[i] = Task{id: i, isMap: false, filenames: []string{}, nReduce: nReduce}
+		c.mapTasks[i] = Task{id: i, taskType: "map", filenames: []string{file}, nReduce: nReduce}
+		c.reduceTasks[i] = Task{id: i, taskType: "reduce", filenames: []string{}, nReduce: nReduce}
 	}
 
 	c.server()

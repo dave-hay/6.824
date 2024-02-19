@@ -23,7 +23,7 @@ type MapCompleteArg struct {
 // GetTask
 type TaskReply struct {
 	Id        int
-	IsMap     bool
+	TaskType  string
 	NReduce   int
 	Filenames []string
 }
