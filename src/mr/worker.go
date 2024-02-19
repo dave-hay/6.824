@@ -44,6 +44,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			log.Panicln(err)
 			return
 		}
+		none := None{}
 		switch task.TaskType {
 		case "map":
 			mapper := NewMapper(task)
@@ -52,7 +53,6 @@ func Worker(mapf func(string, string) []KeyValue,
 			// fmt.Println("mapper finished")
 			// fmt.Printf("Id: %v, FinalFiles: %v\n", mapper.id, mapper.finalFiles)
 			args := MapCompleteArg{Id: mapper.id, FinalFiles: mapper.finalFiles}
-			none := None{}
 
 			// call rpc complete map
 			ok := callRpc("Master.MapTaskCompleted", &args, &none)
@@ -61,9 +61,15 @@ func Worker(mapf func(string, string) []KeyValue,
 				return
 			}
 		case "reduce":
+			reducer := NewReducer(task)
+			Reduce(&reducer, reducef)
+			args := TaskCompleteArgs{Id: reducer.id}
 
-			// TODO: call Reduce func, reducef
-			log.Fatal("cannot call reduce worker")
+			ok := callRpc("Master.MapTaskCompleted", &args, &none)
+			if !ok {
+				log.Fatalf("error completing reducer task for reducer %v", reducer.id)
+				return
+			}
 		default:
 			isJob = false
 		}
