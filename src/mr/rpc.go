@@ -20,6 +20,12 @@ type MapCompleteArg struct {
 	FinalFiles []string
 }
 
+type TaskCompleteArgs struct {
+	Id         int
+	FinalFiles []string
+	Type       string
+}
+
 // GetTask
 type TaskReply struct {
 	Id        int

@@ -51,6 +51,27 @@ func (c *Master) GetTask(args *None, reply *TaskReply) error {
 	return nil
 }
 
+func (c *Master) TaskComplete(args *TaskCompleteArgs, reply *None) error {
+	// fmt.Println("MapTaskCompleted called")
+
+	if args.Type == "reduce" {
+		delete(c.reduceTasks, args.Id)
+
+	} else if args.Type == "map" {
+		delete(c.mapTasks, args.Id)
+
+		// add filenames to reduce objs
+		for i, file := range args.FinalFiles {
+			task := c.reduceTasks[i]
+			task.filenames = append(task.filenames, file)
+			c.reduceTasks[i] = task
+			// fmt.Printf("task %v, file: %v", i, c.reduceTasks[i].filenames)
+		}
+	}
+
+	return nil
+}
+
 func (c *Master) MapTaskCompleted(args *MapCompleteArg, reply *None) error {
 	// delete mapTask from c
 	// fmt.Println("MapTaskCompleted called")
