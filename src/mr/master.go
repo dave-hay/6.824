@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -25,36 +26,51 @@ type Task struct {
 
 // Your code here -- RPC handlers for the worker to call.
 func (c *Master) GetTask(args *None, reply *TaskReply) error {
-	var tasks map[int]Task
 	mapTasks, reduceTasks := len(c.mapTasks), len(c.reduceTasks)
+	fmt.Println()
+	fmt.Println("Called GetTask")
+	fmt.Printf("mapTasks: %v, reduceTasks: %v\n", mapTasks, reduceTasks)
+	fmt.Println()
 
 	if mapTasks == 0 && reduceTasks == 0 {
 		return nil
 	}
 
 	if mapTasks == 0 {
-		tasks = c.reduceTasks
+		for _, task := range c.reduceTasks {
+			if !task.inProcess {
+				reply.TaskType = "reduce"
+				reply.Filenames = task.filenames
+				reply.NReduce = task.nReduce
+				reply.Id = task.id
+				task.inProcess = true
+				break
+			}
+		}
 	} else {
-		tasks = c.mapTasks
-	}
-
-	for _, task := range tasks {
-		if !task.inProcess {
-			reply.TaskType = task.taskType
-			reply.Filenames = task.filenames
-			reply.NReduce = task.nReduce
-			reply.Id = task.id
-			task.inProcess = true
-			break
+		for _, task := range c.mapTasks {
+			if !task.inProcess {
+				reply.TaskType = task.taskType
+				reply.Filenames = task.filenames
+				reply.NReduce = task.nReduce
+				reply.Id = task.id
+				task.inProcess = true
+				break
+			}
 		}
 	}
+
 	return nil
 }
 
 func (c *Master) TaskComplete(args *TaskCompleteArgs, reply *None) error {
-	// fmt.Println("MapTaskCompleted called")
+	fmt.Println()
+	fmt.Println("TaskComplete called")
+	fmt.Printf("Task info: %v\n", args)
+	fmt.Println()
 
 	if args.Type == "reduce" {
+
 		delete(c.reduceTasks, args.Id)
 
 	} else if args.Type == "map" {

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -44,7 +45,6 @@ func Worker(mapf func(string, string) []KeyValue,
 			log.Panicln(err)
 			return
 		}
-		none := None{}
 		switch task.TaskType {
 		case "map":
 			mapper := NewMapper(task)
@@ -52,6 +52,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			Mapify(&mapper, mapf, task.Filenames[0])
 			// fmt.Println("mapper finished")
 			// fmt.Printf("Id: %v, FinalFiles: %v\n", mapper.id, mapper.finalFiles)
+			none := None{}
 			args := MapCompleteArg{Id: mapper.id, FinalFiles: mapper.finalFiles}
 
 			// call rpc complete map
@@ -63,16 +64,19 @@ func Worker(mapf func(string, string) []KeyValue,
 		case "reduce":
 			reducer := NewReducer(task)
 			Reduce(&reducer, reducef)
-			args := TaskCompleteArgs{Id: reducer.id}
+			none := None{}
+			args := TaskCompleteArgs{Id: reducer.id, Type: "reduce"}
 
-			ok := callRpc("Master.MapTaskCompleted", &args, &none)
+			ok := callRpc("Master.TaskComplete", &args, &none)
 			if !ok {
 				log.Fatalf("error completing reducer task for reducer %v", reducer.id)
 				return
 			}
 		default:
+			log.Fatalf("no tasktype for task: %v\n", task)
 			isJob = false
 		}
+		time.Sleep(time.Second)
 	}
 }
 
