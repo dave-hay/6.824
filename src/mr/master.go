@@ -9,23 +9,84 @@ import (
 )
 
 type Master struct {
-	// Your definitions here.
+	nReduce     int
+	mapTasks    map[int]Task
+	reduceTasks map[int]Task
+}
 
+type Task struct {
+	id        int
+	isMap     bool
+	nReduce   int
+	filenames []string
+	inProcess bool
+	// isComplete bool // when done just delete?
 }
 
 // Your code here -- RPC handlers for the worker to call.
 
-// an example RPC handler.
-//
-// the RPC argument and reply types are defined in rpc.go.
-func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
+func (c *Master) GetTask(args *None, reply *TaskReply) error {
+	if len(c.mapTasks) == 0 {
+		// TODO: reduce tasks
+	} else {
+		reply.IsMap = true
+		for _, task := range c.mapTasks {
+			if !task.inProcess {
+				reply.Filenames = task.filenames
+				reply.NReduce = task.nReduce
+				reply.Id = task.id
+				task.inProcess = true
+				break
+			}
+		}
+	}
 	return nil
 }
 
+func (c *Master) MapTaskCompleted(args *MapCompleteArg, reply *None) error {
+	// delete mapTask from c
+	// fmt.Println("MapTaskCompleted called")
+	delete(c.mapTasks, args.Id)
+
+	// add filenames to reduce objs
+	for i, file := range args.FinalFiles {
+		task := c.reduceTasks[i]
+		task.filenames = append(task.filenames, file)
+		c.reduceTasks[i] = task
+		// fmt.Printf("task %v, file: %v", i, c.reduceTasks[i].filenames)
+	}
+	return nil
+}
+
+// todo: if map task error set inProcess to false
+func (c *Master) MapTaskError() error {
+	return nil
+}
+
+// main/mrMaster.go calls Done() periodically to find out
+// if the entire job has finished.
+func (c *Master) Done() bool {
+	return len(c.mapTasks) == 0 && len(c.reduceTasks) == 0
+}
+
+// create a Master.
+// main/mrMaster.go calls this function.
+// nReduce is the number of reduce tasks to use.
+func MakeMaster(files []string, nReduce int) *Master {
+	c := Master{nReduce: nReduce, mapTasks: map[int]Task{}, reduceTasks: map[int]Task{}}
+
+	for i, file := range files {
+		c.mapTasks[i] = Task{id: i, isMap: true, filenames: []string{file}, nReduce: nReduce}
+		c.reduceTasks[i] = Task{id: i, isMap: false, filenames: []string{}, nReduce: nReduce}
+	}
+
+	c.server()
+	return &c
+}
+
 // start a thread that listens for RPCs from worker.go
-func (m *Master) server() {
-	rpc.Register(m)
+func (c *Master) server() {
+	rpc.Register(c)
 	rpc.HandleHTTP()
 	//l, e := net.Listen("tcp", ":1234")
 	sockname := masterSock()
@@ -35,26 +96,4 @@ func (m *Master) server() {
 		log.Fatal("listen error:", e)
 	}
 	go http.Serve(l, nil)
-}
-
-// main/mrmaster.go calls Done() periodically to find out
-// if the entire job has finished.
-func (m *Master) Done() bool {
-	ret := false
-
-	// Your code here.
-
-	return ret
-}
-
-// create a Master.
-// main/mrmaster.go calls this function.
-// nReduce is the number of reduce tasks to use.
-func MakeMaster(files []string, nReduce int) *Master {
-	m := Master{}
-
-	// Your code here.
-
-	m.server()
-	return &m
 }
