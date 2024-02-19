@@ -25,22 +25,27 @@ type Task struct {
 
 // Your code here -- RPC handlers for the worker to call.
 func (c *Master) GetTask(args *None, reply *TaskReply) error {
+	var tasks map[int]Task
 	mapTasks, reduceTasks := len(c.mapTasks), len(c.reduceTasks)
 
 	if mapTasks == 0 && reduceTasks == 0 {
+		return nil
+	}
 
-	} else if mapTasks == 0 {
-		// TODO: reduce
+	if mapTasks == 0 {
+		tasks = c.reduceTasks
 	} else {
-		for _, task := range c.mapTasks {
-			if !task.inProcess {
-				reply.TaskType = task.taskType
-				reply.Filenames = task.filenames
-				reply.NReduce = task.nReduce
-				reply.Id = task.id
-				task.inProcess = true
-				break
-			}
+		tasks = c.mapTasks
+	}
+
+	for _, task := range tasks {
+		if !task.inProcess {
+			reply.TaskType = task.taskType
+			reply.Filenames = task.filenames
+			reply.NReduce = task.nReduce
+			reply.Id = task.id
+			task.inProcess = true
+			break
 		}
 	}
 	return nil
