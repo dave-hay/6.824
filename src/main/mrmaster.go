@@ -2,7 +2,7 @@ package main
 
 //
 // start the master process, which is implemented
-// in ../mr/master.go
+// in 6.824/mr/master.go
 //
 // go run mrmaster.go pg*.txt
 //
