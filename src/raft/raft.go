@@ -1,5 +1,7 @@
 package raft
 
+//lint:ignore U1000 Ignore unused function temporarily for debugging
+
 //
 // this is an outline of the API that raft must expose to
 // the service (or tester). see comments below for
@@ -43,6 +45,7 @@ type ApplyMsg struct {
 }
 
 // A Go object implementing a single Raft peer.
+// Based on Figure 2
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
@@ -50,10 +53,21 @@ type Raft struct {
 	me        int                 // this peer's index into peers[]
 	dead      int32               // set by Kill()
 
-	// Your data here (2A, 2B, 2C).
-	// Look at the paper's Figure 2 for a description of what
-	// state a Raft server must maintain.
+	// persistent state, all servers
+	currentTerm int
+	votedFor    int
+	log         []Log
 
+	// volatile state, all servers
+	commitIndex int
+	lastApplied int
+
+	// volatile state, leaders
+	nextIndex  []int
+	matchIndex []int
+}
+
+type Log struct {
 }
 
 // return currentTerm and whether this server
@@ -62,7 +76,7 @@ func (rf *Raft) GetState() (int, bool) {
 
 	var term int
 	var isleader bool
-	// Your code here (2A).
+	// TODO: Your code here (2A).
 	return term, isleader
 }
 
@@ -100,21 +114,22 @@ func (rf *Raft) readPersist(data []byte) {
 	// }
 }
 
-// example RequestVote RPC arguments structure.
-// field names must start with capital letters!
 type RequestVoteArgs struct {
-	// Your data here (2A, 2B).
+	// TODO: Your data here (2A, 2B).
+	term         int
+	candidateId  int
+	lastLogIndex int
+	lastLogTerm  int
 }
 
-// example RequestVote RPC reply structure.
-// field names must start with capital letters!
 type RequestVoteReply struct {
-	// Your data here (2A).
+	term        int
+	voteGranted bool
 }
 
 // example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	// Your code here (2A, 2B).
+	// TODO: Your code here (2A, 2B).
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -206,7 +221,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 
-	// Your initialization code here (2A, 2B, 2C).
+	// TODO: Your initialization code here (2A, 2B, 2C).
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
