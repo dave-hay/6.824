@@ -67,7 +67,22 @@ type Raft struct {
 	matchIndex []int
 }
 
-type Log struct {
+type Log struct{}
+
+// AppendEntries RPC struct
+// (though you may not need all the arguments yet),
+// and have the leader send them out periodically.
+type AppendEntriesArgs struct {
+	term         int   // leaders term
+	leaderId     int   // so followers can redirect clients
+	prevLogIndex int   // index of log entry immediately preceding new ones
+	prevLogTerm  int   // term of prevLogIndex entry
+	entries      []Log // log entries to store (empty for hearbeat; may send > 1 for efficiency)
+	leaderCommit int   // leaders commit index
+}
+type AppendEntriesReply struct {
+	term    int  // curTerm, for leader to update itself
+	success bool // true if follower contained entry matching prevLogIndex + prevLogTerm
 }
 
 // return currentTerm and whether this server
