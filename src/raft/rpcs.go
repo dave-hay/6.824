@@ -31,3 +31,37 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = true
 	}
 }
+
+// AppendEntries RPC struct
+// (though you may not need all the arguments yet),
+// and have the leader send them out periodically.
+type AppendEntriesArgs struct {
+	Term         int   // leaders term
+	LeaderId     int   // so followers can redirect clients
+	PrevLogIndex int   // index of log entry immediately preceding new ones
+	PrevLogTerm  int   // term of prevLogIndex entry
+	Entries      []Log // log entries to store (empty for hearbeat; may send > 1 for efficiency)
+	LeaderCommit int   // leaders commit index
+}
+
+type AppendEntriesReply struct {
+	Term    int  // curTerm, for leader to update itself
+	Success bool // true if follower contained entry matching prevLogIndex + prevLogTerm
+}
+
+// Write an AppendEntries RPC handler method
+// resets the election timeout so other servers
+// don't step forward as leaders while one is elected
+
+// invoked by leader to replicate log entries
+// also used as heartbeat
+// TODO:
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	// this should reset the timeouts for the nodes
+
+	// if no Entries empty then it is a heatbeat
+	if len(args.Entries) == 0 {
+
+	}
+	//
+}
