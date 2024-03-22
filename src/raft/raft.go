@@ -101,12 +101,41 @@ type Log struct {
 	term    int    // term when entry was recieved by leader; first index is 1
 }
 
-// func (rf *Raft) sendAppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {}
+func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
+	args := AppendEntriesArgs{
+		Term:         rf.currentTerm,
+		LeaderId:     rf.me,
+		PrevLogIndex: len(rf.log) - 1,
+		PrevLogTerm:  rf.log[len(rf.log)-1].term,
+		LeaderCommit: rf.commitIndex,
+	}
 
-// TODO: send heartbeat to all peers
-func (rf *Raft) sendHeartbeat(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	return ok
+	if isHeartbeat {
+		args.Entries = make([]Log, 0)
+	}
+
+	reply := &AppendEntriesReply{}
+
+	ok := rf.peers[server].Call("Raft.AppendEntries", &args, reply)
+
+	if !ok {
+		return
+	}
+
+	if reply.Success {
+		// Update nextIndex and matchIndex for the follower
+		// Check if we can commit new entries
+	} else if reply.Term > rf.currentTerm {
+		rf.convertToFollower()
+	}
+}
+
+func (rf *Raft) sendHeartbeats() {
+	for server := range len(rf.peers) {
+		if server != rf.me {
+			go rf.sendAppendEntries(server, true)
+		}
+	}
 }
 
 // return currentTerm and whether this server
