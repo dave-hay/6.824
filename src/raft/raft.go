@@ -144,18 +144,52 @@ func (rf *Raft) readPersist(data []byte) {
 	// }
 }
 
-type RequestVoteArgs struct {
-	// TODO: Your data here (2A, 2B).
-	term         int
-	candidateId  int
-	lastLogIndex int
-	lastLogTerm  int
-}
+// example code to send a RequestVote RPC to a server.
+// server is the index of the target server in rf.peers[].
+// expects RPC arguments in args.
+// fills in *reply with RPC reply, so caller should
+// pass &reply.
+// func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+// 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+// 	return ok
+// }
 
-type RequestVoteReply struct {
-	term        int
-	voteGranted bool
-}
+// server starts election for self
+// request a vote from every server
+// if votes > half, is elected
+func (rf *Raft) startElection() {
+	// TODO: Needs to know if it has won the election
+	var votes atomic.Uint64
+	var wg sync.WaitGroup
+
+	args := RequestVoteArgs{
+		CandidateTerm: rf.currentTerm,
+		CandidateId:   rf.me,
+		LastLogIndex:  len(rf.log) - 1,
+		LastLogTerm:   rf.log[len(rf.log)-1].term,
+	}
+
+	// goroutines to send to every server
+	// cycle thru every peer except self
+	for i := range len(rf.peers) {
+		wg.Add(1)
+
+		go func(i int, args *RequestVoteArgs) {
+			reply := RequestVoteReply{}
+			if i != rf.me {
+
+				ok := rf.peers[i].Call("Raft.RequestVote", args, &reply)
+
+				if ok && reply.VoteGranted {
+					votes.Add(1)
+				}
+			}
+
+			wg.Done()
+		}(i, &args)
+
+		wg.Wait()
+	}
 
 // example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
