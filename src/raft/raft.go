@@ -195,37 +195,23 @@ func (rf *Raft) sendVotes() int {
 // request a vote from every server
 // if votes > half, is elected
 func (rf *Raft) startElection() {
-	// TODO: Needs to know if it has won the election
-	var votes atomic.Uint64
-	var wg sync.WaitGroup
+	rf.state = Candidate
+	rf.currentTerm++
+	rf.votedFor = VotedFor{rf.me, true}
+	rf.resetElectionTimeout()
 
-	args := RequestVoteArgs{
-		CandidateTerm: rf.currentTerm,
-		CandidateId:   rf.me,
-		LastLogIndex:  len(rf.log) - 1,
-		LastLogTerm:   rf.log[len(rf.log)-1].term,
-	}
+	totalVotes := rf.sendVotes()
 
 	// goroutines to send to every server
 	// cycle thru every peer except self
 	for i := range len(rf.peers) {
 		wg.Add(1)
 
-		go func(i int, args *RequestVoteArgs) {
-			reply := RequestVoteReply{}
-			if i != rf.me {
-
-				ok := rf.peers[i].Call("Raft.RequestVote", args, &reply)
-
-				if ok && reply.VoteGranted {
-					votes.Add(1)
-				}
-			}
-
-			wg.Done()
-		}(i, &args)
-
-		wg.Wait()
+	votesNeeded := int(math.Floor(float64(len(rf.peers))/2) + 1)
+	if totalVotes >= votesNeeded {
+		// TODO: election is won
+		rf.state = Leader
+		rf.sendHeartbeats()
 	}
 
 // example RequestVote RPC handler.
