@@ -152,14 +152,43 @@ func (rf *Raft) GetState() (int, bool) {
 // expects RPC arguments in args.
 // fills in *reply with RPC reply, so caller should
 // pass &reply.
-// func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-// 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-// 	return ok
-// }
+func (rf *Raft) sendRequestVote(server int, voteFor chan int) {
+	if server == rf.me {
+		voteFor <- 1
+		return
+	}
 
-func (rf *Raft) electionTimeout() time.Duration {
-	// Adjust these values to tune your heartbeat frequency and election timeout
-	return time.Duration(rand.Intn(200)+300) * time.Millisecond
+	args := &RequestVoteArgs{
+		CandidateTerm: rf.currentTerm,
+		CandidateId:   rf.me,
+		LastLogIndex:  len(rf.log) - 1,
+		LastLogTerm:   rf.log[len(rf.log)-1].term,
+	}
+	reply := &RequestVoteReply{}
+	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+
+	if ok && reply.VoteGranted {
+		voteFor <- 1
+	} else {
+		voteFor <- 0
+	}
+}
+
+func (rf *Raft) sendVotes() int {
+	peers := len(rf.peers)
+	votes := make(chan int, peers)
+
+	for server := range len(rf.peers) {
+		go rf.sendRequestVote(server, votes)
+	}
+
+	totalVotes := 0
+
+	for v := range votes {
+		totalVotes += v
+	}
+
+	return totalVotes
 }
 
 // server starts election for self
