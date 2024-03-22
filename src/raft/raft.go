@@ -164,6 +164,11 @@ func (rf *Raft) readPersist(data []byte) {
 // 	return ok
 // }
 
+func (rf *Raft) electionTimeout() time.Duration {
+	// Adjust these values to tune your heartbeat frequency and election timeout
+	return time.Duration(rand.Intn(200)+300) * time.Millisecond
+}
+
 // server starts election for self
 // request a vote from every server
 // if votes > half, is elected
