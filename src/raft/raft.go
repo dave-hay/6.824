@@ -68,7 +68,6 @@ type Raft struct {
 	// index of highest log entry known to be committed
 	// initialized to 0, increasing monotonically
 	commitIndex int
-	lastApplied int
 
 	// index of highest log entry applied to state machine
 	// initialized to 0, increasing monotonically
@@ -87,18 +86,9 @@ type Raft struct {
 	matchIndex []int
 }
 
-type Log struct{}
-
-// AppendEntries RPC struct
-// (though you may not need all the arguments yet),
-// and have the leader send them out periodically.
-type AppendEntriesArgs struct {
-	term         int   // leaders term
-	leaderId     int   // so followers can redirect clients
-	prevLogIndex int   // index of log entry immediately preceding new ones
-	prevLogTerm  int   // term of prevLogIndex entry
-	entries      []Log // log entries to store (empty for hearbeat; may send > 1 for efficiency)
-	leaderCommit int   // leaders commit index
+type Log struct {
+	command string // command for state machine
+	term    int    // term when entry was recieved by leader; first index is 1
 }
 type AppendEntriesReply struct {
 	term    int  // curTerm, for leader to update itself
@@ -107,11 +97,12 @@ type AppendEntriesReply struct {
 
 // return currentTerm and whether this server
 // believes it is the leader.
+// TODO: Your code here (2A).
 func (rf *Raft) GetState() (int, bool) {
 
 	var term int
 	var isleader bool
-	// TODO: Your code here (2A).
+	term = rf.currentTerm
 	return term, isleader
 }
 
@@ -256,7 +247,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 
-	// TODO: Your initialization code here (2A, 2B, 2C).
+	// TODO: create a background goroutine that will
+	// kick off leader election periodically by sending out RequestVote RPCs
+	// when it hasn't heard from another peer for a while. This way a peer
+	// will learn who is the leader, if there is already a leader, or become the leader itself.
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
