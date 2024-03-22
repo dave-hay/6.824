@@ -281,6 +281,10 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+func (rf *Raft) setHeartbeatTimeout() time.Duration {
+	return time.Duration(rand.Intn(150)+150) * time.Millisecond
+}
+
 func (rf *Raft) setElectionTimeout() time.Duration {
 	return time.Duration(rand.Intn(100)+200) * time.Millisecond
 }
@@ -288,6 +292,12 @@ func (rf *Raft) setElectionTimeout() time.Duration {
 // Record the current time as the time when the election timeout should be reset.
 func (rf *Raft) resetElectionTimeout() {
 	rf.electionTimeout = time.Now()
+}
+
+func (rf *Raft) timeSinceElectionTimeout() time.Duration {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	return time.Since(rf.electionTimeout)
 }
 
 func (rf *Raft) mainLoop() {
@@ -302,9 +312,12 @@ func (rf *Raft) mainLoop() {
 
 		switch rf.state {
 		case Leader:
+			time.Sleep(rf.setHeartbeatTimeout())
 			rf.sendHeartbeats()
 		default:
-			if timeOutlength < time.Since(rf.electionTimeout) {
+			timeOutlength := rf.setElectionTimeout()
+			time.Sleep(timeOutlength)
+			if timeOutlength < rf.timeSinceElectionTimeout() {
 				Debugf("rf: %d starting election\n", rf.me)
 				rf.startElection()
 				Debugf("rf: %d end of election\n", rf.me)
