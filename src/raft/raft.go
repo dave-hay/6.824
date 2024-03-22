@@ -90,9 +90,13 @@ type Log struct {
 	command string // command for state machine
 	term    int    // term when entry was recieved by leader; first index is 1
 }
-type AppendEntriesReply struct {
-	term    int  // curTerm, for leader to update itself
-	success bool // true if follower contained entry matching prevLogIndex + prevLogTerm
+
+// func (rf *Raft) sendAppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {}
+
+// TODO: send heartbeat to all peers
+func (rf *Raft) sendHeartbeat(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+	return ok
 }
 
 // return currentTerm and whether this server
