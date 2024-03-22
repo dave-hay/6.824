@@ -145,6 +145,8 @@ func (rf *Raft) sendHeartbeats() {
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	term := rf.currentTerm
 	isLeader := rf.state == Leader
 	return term, isLeader
