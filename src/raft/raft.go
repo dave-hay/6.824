@@ -168,10 +168,10 @@ func (rf *Raft) convertToFollower() {
 func (rf *Raft) sendRequestVote(server int, voteFor chan int) {
 	Debugf("rf: %d - sendRequestVote()\n", rf.me)
 
-	if server == rf.me {
-		voteFor <- 1
-		return
-	}
+	// if server == rf.me {
+	// 	voteFor <- 1
+	// 	return
+	// }
 
 	args := &RequestVoteArgs{
 		CandidateTerm: rf.currentTerm,
@@ -186,6 +186,10 @@ func (rf *Raft) sendRequestVote(server int, voteFor chan int) {
 	if ok && reply.VoteGranted {
 		voteFor <- 1
 	} else {
+		if reply.CurrentTerm > rf.currentTerm {
+			rf.currentTerm = reply.CurrentTerm
+			rf.convertToFollower()
+		}
 		voteFor <- 0
 	}
 }
@@ -197,14 +201,15 @@ func (rf *Raft) sendVotes() int {
 	votes := make(chan int, peers)
 
 	for server := range len(rf.peers) {
-		go rf.sendRequestVote(server, votes)
+		if server != rf.me {
+			go rf.sendRequestVote(server, votes)
+		}
 	}
 
-	totalVotes := 0
+	totalVotes := 1
 
-	for v := range peers {
-		Debugf("rf: %d vote %d\n", rf.me, v)
-		totalVotes += v
+	for i := 0; i < peers-1; i++ {
+		totalVotes += <-votes
 	}
 
 	Debugf("rf: %d totalVotes %d", rf.me, totalVotes)
@@ -286,7 +291,7 @@ func (rf *Raft) setHeartbeatTimeout() time.Duration {
 }
 
 func (rf *Raft) setElectionTimeout() time.Duration {
-	return time.Duration(rand.Intn(100)+200) * time.Millisecond
+	return time.Duration(rand.Intn(200)+400) * time.Millisecond
 }
 
 // Record the current time as the time when the election timeout should be reset.
@@ -305,10 +310,7 @@ func (rf *Raft) mainLoop() {
 	// while not dead
 	// if state == Leader, send out heart beats
 	// if state == Follower, if havent heard from leader in time start vote
-	rf.resetElectionTimeout()
 	for {
-		timeOutlength := rf.setElectionTimeout()
-		time.Sleep(timeOutlength)
 
 		switch rf.state {
 		case Leader:
@@ -344,7 +346,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.state = Follower
 
 	if debug {
-		log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+		log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
 		log.Println("debugging enabled")
 	}
 
@@ -352,6 +354,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// kick off leader election periodically by sending out RequestVote RPCs
 	// when it hasn't heard from another peer for a while. This way a peer
 	// will learn who is the leader, if there is already a leader, or become the leader itself.
+
+	rf.resetElectionTimeout()
 	go rf.mainLoop()
 
 	// initialize from state persisted before a crash
@@ -360,7 +364,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	return rf
 }
 
-var debug bool = true
+var debug bool = false
 
 func Debugf(format string, v ...interface{}) {
 	if debug {

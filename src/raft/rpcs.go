@@ -17,6 +17,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	Debugf("rf: %d, request by %d\n", rf.me, args.CandidateId)
 	// reply false if term < currentTerm
 	if args.CandidateTerm < rf.currentTerm {
 		reply.CurrentTerm = rf.currentTerm
@@ -24,10 +25,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 
+	// if candidate hasn't voted or has already voted for candidate
 	isCandidateValid := !rf.votedFor.hasVoted || rf.votedFor.candidateId == args.CandidateId
 	isLogValid := rf.lastAppliedIndex <= args.LastLogIndex && len(rf.log) <= args.LastLogTerm
 
 	if isCandidateValid && isLogValid {
+		Debugf("rf: %d, request by %d, vote granted %v\n", rf.me, args.CandidateId, reply.VoteGranted)
 		reply.VoteGranted = true
 	}
 }
