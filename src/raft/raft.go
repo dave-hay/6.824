@@ -194,7 +194,8 @@ func (rf *Raft) sendVotes() int {
 
 	totalVotes := 0
 
-	for v := range votes {
+	for v := range peers {
+		fmt.Printf("rf: %d vote %d\n", rf.me, v)
 		totalVotes += v
 	}
 
