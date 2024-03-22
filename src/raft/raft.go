@@ -113,11 +113,9 @@ func (rf *Raft) sendHeartbeat(server int, args *AppendEntriesArgs, reply *Append
 // believes it is the leader.
 // TODO: Your code here (2A).
 func (rf *Raft) GetState() (int, bool) {
-
-	var term int
-	var isleader bool
-	term = rf.currentTerm
-	return term, isleader
+	term := rf.currentTerm
+	isLeader := rf.state == Leader
+	return term, isLeader
 }
 
 // save Raft's persistent state to stable storage,
