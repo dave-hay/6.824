@@ -20,8 +20,11 @@ package raft
 //
 
 import (
+	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"6.824/labrpc"
 )
@@ -60,13 +63,13 @@ const (
 // A Go object implementing a single Raft peer.
 // Based on Figure 2
 type Raft struct {
-	mu                 sync.Mutex          // Lock to protect shared access to this peer's state
-	peers              []*labrpc.ClientEnd // RPC end points of all peers
-	persister          *Persister          // Object to hold this peer's persisted state
-	me                 int                 // this peer's index into peers[]
-	dead               int32               // set by Kill()
-	state              State
-	electionResetEvent time.Time
+	mu              sync.Mutex          // Lock to protect shared access to this peer's state
+	peers           []*labrpc.ClientEnd // RPC end points of all peers
+	persister       *Persister          // Object to hold this peer's persisted state
+	me              int                 // this peer's index into peers[]
+	dead            int32               // set by Kill()
+	state           State
+	electionTimeout time.Time
 
 	// persistent state, all servers
 	currentTerm int      // latest term server has seen; initialized to 0
@@ -140,11 +143,18 @@ func (rf *Raft) sendHeartbeats() {
 
 // return currentTerm and whether this server
 // believes it is the leader.
-// TODO: Your code here (2A).
 func (rf *Raft) GetState() (int, bool) {
 	term := rf.currentTerm
 	isLeader := rf.state == Leader
 	return term, isLeader
+}
+
+// Sets state to Follower.
+// Resets voted for and election timeout
+func (rf *Raft) convertToFollower() {
+	rf.state = Follower
+	rf.votedFor = VotedFor{-1, false}
+	rf.resetElectionTimeout()
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -204,8 +214,6 @@ func (rf *Raft) startElection() {
 
 	// goroutines to send to every server
 	// cycle thru every peer except self
-	for i := range len(rf.peers) {
-		wg.Add(1)
 
 	votesNeeded := int(math.Floor(float64(len(rf.peers))/2) + 1)
 	if totalVotes >= votesNeeded {
@@ -214,41 +222,6 @@ func (rf *Raft) startElection() {
 		rf.sendHeartbeats()
 	}
 
-// example RequestVote RPC handler.
-func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	// TODO: Your code here (2A, 2B).
-}
-
-// example code to send a RequestVote RPC to a server.
-// server is the index of the target server in rf.peers[].
-// expects RPC arguments in args.
-// fills in *reply with RPC reply, so caller should
-// pass &reply.
-// the types of the args and reply passed to Call() must be
-// the same as the types of the arguments declared in the
-// handler function (including whether they are pointers).
-//
-// The labrpc package simulates a lossy network, in which servers
-// may be unreachable, and in which requests and replies may be lost.
-// Call() sends a request and waits for a reply. If a reply arrives
-// within a timeout interval, Call() returns true; otherwise
-// Call() returns false. Thus Call() may not return for a while.
-// A false return can be caused by a dead server, a live server that
-// can't be reached, a lost request, or a lost reply.
-//
-// Call() is guaranteed to return (perhaps after a delay) *except* if the
-// handler function on the server side does not return.  Thus there
-// is no need to implement your own timeouts around Call().
-//
-// look at the comments in 6.824/labrpc/labrpc.go for more details.
-//
-// if you're having trouble getting RPC to work, check that you've
-// capitalized all field names in structs passed over RPC, and
-// that the caller passes the address of the reply struct with &, not
-// the struct itself.
-func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	return ok
 }
 
 // the service using Raft (e.g. a k/v server) wants to start
@@ -292,6 +265,35 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+func (rf *Raft) setElectionTimeout() time.Duration {
+	return time.Duration(rand.Intn(100)+300) * time.Millisecond
+}
+
+// Record the current time as the time when the election timeout should be reset.
+func (rf *Raft) resetElectionTimeout() {
+	rf.electionTimeout = time.Now()
+}
+
+func (rf *Raft) mainLoop() {
+
+	// while not dead
+	// if state == Leader, send out heart beats
+	// if state == Follower, if havent heard from leader in time start vote
+	for {
+		timeOutlength := rf.setElectionTimeout()
+		time.Sleep(timeOutlength)
+
+		switch rf.state {
+		case Leader:
+			rf.sendHeartbeats()
+		default:
+			if timeOutlength < time.Since(rf.electionTimeout) {
+				rf.startElection()
+			}
+		}
+	}
+}
+
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
 // server's port is peers[me]. all the servers' peers[] arrays
@@ -308,10 +310,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 
-	// TODO: create a background goroutine that will
+	// create a background goroutine that will
 	// kick off leader election periodically by sending out RequestVote RPCs
 	// when it hasn't heard from another peer for a while. This way a peer
 	// will learn who is the leader, if there is already a leader, or become the leader itself.
+	go rf.mainLoop()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
