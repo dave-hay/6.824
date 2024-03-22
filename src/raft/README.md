@@ -1,9 +1,22 @@
 # Raft
 
-The labrpc package simulates a lossy network, in which servers may be unreachable, and in which requests and replies may be lost. Call() sends a request and waits for a reply. If a reply arrives within a timeout interval, Call() returns true; otherwise Call() returns false. Thus Call() may not return for a while. A false return can be caused by a dead server, a live server that can't be reached, a lost request, or a lost reply.
+`Call()`:
 
-Call() is guaranteed to return (perhaps after a delay) _except_ if the
-handler function on the server side does not return. Thus there
-is no need to implement your own timeouts around Call().
+Simulates lossy network, servers may be unreachable or req/res may be lost.
 
-look at the comments in 6.824/labrpc/labrpc.go for more details.
+- sends RPC and waits for a reply. may be delayed
+- returns `true`: If a reply arrives within a timeout interval.
+- returns `false`: if doesn't receive reply in time. Due to dead server/lost req/res.
+
+`RequestVote` RPC
+
+- server is the index of the target server in `rf.peers[]`
+- expects RPC arguments in args.
+- fills in \*reply with RPC reply, so caller should pass &reply.
+
+```go
+func (rf *Raft) sendRequestVote(server, args, reply) bool {
+    ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+    return ok
+}
+```
