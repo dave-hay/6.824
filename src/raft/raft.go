@@ -44,6 +44,11 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
+type VotedFor struct {
+	candidateId int
+	hasVoted    bool
+}
+
 // A Go object implementing a single Raft peer.
 // Based on Figure 2
 type Raft struct {
@@ -54,16 +59,31 @@ type Raft struct {
 	dead      int32               // set by Kill()
 
 	// persistent state, all servers
-	currentTerm int
-	votedFor    int
-	log         []Log
+	currentTerm int      // latest term server has seen; initialized to 0
+	votedFor    VotedFor // candidateId that recived vote in curTerm or null
+	log         []Log    // log entries; first index is 1
 
 	// volatile state, all servers
+
+	// index of highest log entry known to be committed
+	// initialized to 0, increasing monotonically
 	commitIndex int
 	lastApplied int
 
+	// index of highest log entry applied to state machine
+	// initialized to 0, increasing monotonically
+	lastAppliedIndex int
+
+	// TODO: reinitialized after election
 	// volatile state, leaders
-	nextIndex  []int
+	// tracking the state of other servers
+
+	// index of the next log entry to send to each server
+	// initialized to leader last log index + 1
+	nextIndex []int
+
+	// index of highest log entry know to be replicated on each server
+	// initialized to 0, increasing monotonically
 	matchIndex []int
 }
 
