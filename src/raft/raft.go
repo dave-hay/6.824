@@ -49,14 +49,24 @@ type VotedFor struct {
 	hasVoted    bool
 }
 
+type State int
+
+const (
+	Follower State = iota
+	Candidate
+	Leader
+)
+
 // A Go object implementing a single Raft peer.
 // Based on Figure 2
 type Raft struct {
-	mu        sync.Mutex          // Lock to protect shared access to this peer's state
-	peers     []*labrpc.ClientEnd // RPC end points of all peers
-	persister *Persister          // Object to hold this peer's persisted state
-	me        int                 // this peer's index into peers[]
-	dead      int32               // set by Kill()
+	mu                 sync.Mutex          // Lock to protect shared access to this peer's state
+	peers              []*labrpc.ClientEnd // RPC end points of all peers
+	persister          *Persister          // Object to hold this peer's persisted state
+	me                 int                 // this peer's index into peers[]
+	dead               int32               // set by Kill()
+	state              State
+	electionResetEvent time.Time
 
 	// persistent state, all servers
 	currentTerm int      // latest term server has seen; initialized to 0
