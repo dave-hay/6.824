@@ -20,6 +20,7 @@ package raft
 //
 
 import (
+	"log"
 	"math"
 	"math/rand"
 	"sync"
@@ -100,16 +101,16 @@ type Raft struct {
 }
 
 type Log struct {
-	command string // command for state machine
-	term    int    // term when entry was recieved by leader; first index is 1
+	Command string // command for state machine
+	Term    int    // term when entry was recieved by leader; first index is 1
 }
 
 func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
 	args := AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderId:     rf.me,
-		PrevLogIndex: len(rf.log) - 1,
-		PrevLogTerm:  rf.log[len(rf.log)-1].term,
+		PrevLogIndex: len(rf.log),
+		PrevLogTerm:  len(rf.log),
 		LeaderCommit: rf.commitIndex,
 	}
 
@@ -163,6 +164,8 @@ func (rf *Raft) convertToFollower() {
 // fills in *reply with RPC reply, so caller should
 // pass &reply.
 func (rf *Raft) sendRequestVote(server int, voteFor chan int) {
+	Debugf("rf: %d - sendRequestVote()\n", rf.me)
+
 	if server == rf.me {
 		voteFor <- 1
 		return
@@ -171,9 +174,10 @@ func (rf *Raft) sendRequestVote(server int, voteFor chan int) {
 	args := &RequestVoteArgs{
 		CandidateTerm: rf.currentTerm,
 		CandidateId:   rf.me,
-		LastLogIndex:  len(rf.log) - 1,
-		LastLogTerm:   rf.log[len(rf.log)-1].term,
+		LastLogIndex:  len(rf.log),
+		LastLogTerm:   len(rf.log),
 	}
+
 	reply := &RequestVoteReply{}
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 
@@ -185,6 +189,8 @@ func (rf *Raft) sendRequestVote(server int, voteFor chan int) {
 }
 
 func (rf *Raft) sendVotes() int {
+	Debugf("rf: %d - sendVotes()\n", rf.me)
+
 	peers := len(rf.peers)
 	votes := make(chan int, peers)
 
@@ -195,9 +201,11 @@ func (rf *Raft) sendVotes() int {
 	totalVotes := 0
 
 	for v := range peers {
-		fmt.Printf("rf: %d vote %d\n", rf.me, v)
+		Debugf("rf: %d vote %d\n", rf.me, v)
 		totalVotes += v
 	}
+
+	Debugf("rf: %d totalVotes %d", rf.me, totalVotes)
 
 	return totalVotes
 }
@@ -206,12 +214,17 @@ func (rf *Raft) sendVotes() int {
 // request a vote from every server
 // if votes > half, is elected
 func (rf *Raft) startElection() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	rf.state = Candidate
 	rf.currentTerm++
 	rf.votedFor = VotedFor{rf.me, true}
 	rf.resetElectionTimeout()
+	Debugf("rf: %d in election\n", rf.me)
 
 	totalVotes := rf.sendVotes()
+	Debugf("raft: %d, totalVotes: %d", rf.me, totalVotes)
 
 	// goroutines to send to every server
 	// cycle thru every peer except self
@@ -267,7 +280,7 @@ func (rf *Raft) killed() bool {
 }
 
 func (rf *Raft) setElectionTimeout() time.Duration {
-	return time.Duration(rand.Intn(100)+300) * time.Millisecond
+	return time.Duration(rand.Intn(100)+200) * time.Millisecond
 }
 
 // Record the current time as the time when the election timeout should be reset.
@@ -280,6 +293,7 @@ func (rf *Raft) mainLoop() {
 	// while not dead
 	// if state == Leader, send out heart beats
 	// if state == Follower, if havent heard from leader in time start vote
+	rf.resetElectionTimeout()
 	for {
 		timeOutlength := rf.setElectionTimeout()
 		time.Sleep(timeOutlength)
@@ -289,7 +303,9 @@ func (rf *Raft) mainLoop() {
 			rf.sendHeartbeats()
 		default:
 			if timeOutlength < time.Since(rf.electionTimeout) {
+				Debugf("rf: %d starting election\n", rf.me)
 				rf.startElection()
+				Debugf("rf: %d end of election\n", rf.me)
 			}
 		}
 	}
@@ -310,6 +326,12 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.peers = peers
 	rf.persister = persister
 	rf.me = me
+	rf.state = Follower
+
+	if debug {
+		log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+		log.Println("debugging enabled")
+	}
 
 	// create a background goroutine that will
 	// kick off leader election periodically by sending out RequestVote RPCs
@@ -321,6 +343,14 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.readPersist(persister.ReadRaftState())
 
 	return rf
+}
+
+var debug bool = true
+
+func Debugf(format string, v ...interface{}) {
+	if debug {
+		log.Printf(format, v...)
+	}
 }
 
 // 2C

@@ -25,7 +25,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	isCandidateValid := !rf.votedFor.hasVoted || rf.votedFor.candidateId == args.CandidateId
-	isLogValid := rf.lastAppliedIndex <= args.LastLogIndex && rf.log[rf.lastAppliedIndex].term <= args.LastLogTerm
+	isLogValid := rf.lastAppliedIndex <= args.LastLogIndex && len(rf.log) <= args.LastLogTerm
 
 	if isCandidateValid && isLogValid {
 		reply.VoteGranted = true
