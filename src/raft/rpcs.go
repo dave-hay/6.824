@@ -55,13 +55,36 @@ type AppendEntriesReply struct {
 
 // invoked by leader to replicate log entries
 // also used as heartbeat
-// TODO:
+
+// Receiver implementation:
+// 2. Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm (§5.3)
+// 3. If an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it (§5.3)
+// 4. Append any new entries not already in the log
+// 5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	// this should reset the timeouts for the nodes
 
-	// if no Entries empty then it is a heatbeat
-	if len(args.Entries) == 0 {
-
+	// 1. Reply false if term < currentTerm (§5.1)
+	if args.Term < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		reply.Success = false
+		return
 	}
+
+	// If serverTerm >= currentTerm becomes follower
+	rf.currentTerm = args.Term
+	rf.convertToFollower()
+	reply.Success = true
+
+	if args.LeaderCommit > rf.commitIndex {
+		rf.commitIndex = args.LeaderCommit
+	}
+
+	// if no Entries empty then it is a heatbeat
+	// if len(args.Entries) == 0 {
+
+	// }
 	//
 }
