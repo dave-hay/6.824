@@ -69,8 +69,8 @@ type Raft struct {
 	persister       *Persister          // Object to hold this peer's persisted state
 	me              int                 // this peer's index into peers[]
 	dead            int32               // set by Kill()
-	state           State
-	electionTimeout time.Time
+	state           State               // Follower | Candidate | Leader
+	electionTimeout time.Time           // length of election timeout
 
 	// persistent state, all servers
 	currentTerm int      // latest term server has seen; initialized to 0
@@ -238,7 +238,6 @@ func (rf *Raft) startElection() {
 
 	votesNeeded := int(math.Floor(float64(len(rf.peers))/2) + 1)
 	if totalVotes >= votesNeeded {
-		// TODO: election is won
 		rf.state = Leader
 		rf.sendHeartbeats()
 	}
@@ -281,6 +280,7 @@ func (rf *Raft) Kill() {
 	// Your code here, if desired.
 }
 
+//lint:ignore U1000 Ignore unused function temporarily for debugging
 func (rf *Raft) killed() bool {
 	z := atomic.LoadInt32(&rf.dead)
 	return z == 1
@@ -377,6 +377,8 @@ func Debugf(format string, v ...interface{}) {
 // save Raft's persistent state to stable storage,
 // where it can later be retrieved after a crash and restart.
 // see paper's Figure 2 for a description of what should be persistent.
+//
+//lint:ignore U1000 Ignore unused function temporarily for debugging
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
