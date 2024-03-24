@@ -105,7 +105,7 @@ type Log struct {
 }
 
 func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
-	args := AppendEntriesArgs{
+	args := &AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderId:     rf.me,
 		PrevLogIndex: len(rf.log),
@@ -119,15 +119,15 @@ func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
 
 	reply := &AppendEntriesReply{}
 
-	ok := rf.peers[server].Call("Raft.AppendEntries", &args, reply)
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
 	if !ok {
 		return
 	}
 
 	if reply.Success {
-		// Update nextIndex and matchIndex for the follower
-		// Check if we can commit new entries
+		// TODO: Update nextIndex and matchIndex for the follower
+		// TODO: Check if we can commit new entries
 	} else if reply.Term > rf.currentTerm {
 		rf.convertToFollower()
 	}
