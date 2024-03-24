@@ -2,18 +2,18 @@
 
 `Start()`
 
-Start agreement on the next command to be appended to Raft's log.
-If this server isn't the leader, returns false. 
-If server start the agreement and return immediately. 
+Service (e.g. a k/v server) using RAFT wants to start agreement on the next command to be appended to Raft's log.
+If this server isn't the leader, returns false.
+If server start the agreement and return immediately.
 
-There is no guarantee that this command will ever be committed to the Raft log, 
-since the leader may fail or lose an election. 
+No guarantee that this command will ever be committed to the Raft log, since the leader may fail or lose an election.
 
 Even if the Raft instance has been killed, this function should return gracefully.
 
 **Return**: `index, term, isLeader`
+
 - `index`: index that the command (if committed).
-- `term`: current term. 
+- `term`: current term.
 - `isLeader`: true if server believes it is leader.
 
 ```go
