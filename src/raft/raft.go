@@ -359,14 +359,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	return rf
 }
 
-var debug bool = false
-
-func Debugf(format string, v ...interface{}) {
-	if debug {
-		log.Printf(format, v...)
-	}
-}
-
 // 2C
 
 // save Raft's persistent state to stable storage,
