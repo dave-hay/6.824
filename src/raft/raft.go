@@ -249,14 +249,14 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := false
 
 	// if not leader return
-	rf.mu.Lock()
-	if rf.state == Leader {
-		index = rf.commitIndex
-		term = rf.currentTerm
-		isLeader = true
-		return index, term, isLeader
-	}
-	rf.mu.Unlock()
+	// rf.mu.Lock()
+	// if rf.state == Leader {
+	// 	index = rf.commitIndex
+	// 	term = rf.currentTerm
+	// 	isLeader = true
+	// 	return index, term, isLeader
+	// }
+	// rf.mu.Unlock()
 
 	return index, term, isLeader
 }
