@@ -168,10 +168,10 @@ func (rf *Raft) convertToFollower() {
 func (rf *Raft) sendRequestVote(server int, voteFor chan int) {
 	Debugf("rf: %d - sendRequestVote()\n", rf.me)
 
-	// if server == rf.me {
-	// 	voteFor <- 1
-	// 	return
-	// }
+	if server == rf.me {
+		voteFor <- 1
+		return
+	}
 
 	args := &RequestVoteArgs{
 		CandidateTerm: rf.currentTerm,
@@ -201,14 +201,12 @@ func (rf *Raft) sendVotes() int {
 	votes := make(chan int, peers)
 
 	for server := range len(rf.peers) {
-		if server != rf.me {
-			go rf.sendRequestVote(server, votes)
-		}
+		go rf.sendRequestVote(server, votes)
 	}
 
-	totalVotes := 1
+	totalVotes := 0
 
-	for i := 0; i < peers-1; i++ {
+	for i := 0; i < peers; i++ {
 		totalVotes += <-votes
 	}
 
