@@ -105,6 +105,7 @@ type Log struct {
 }
 
 func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
+	rf.mu.Lock()
 	args := &AppendEntriesArgs{
 		Term:         rf.currentTerm,
 		LeaderId:     rf.me,
@@ -112,6 +113,7 @@ func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
 		PrevLogTerm:  len(rf.log),
 		LeaderCommit: rf.commitIndex,
 	}
+	rf.mu.Unlock()
 
 	if isHeartbeat {
 		args.Entries = make([]Log, 0)
