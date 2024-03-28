@@ -225,8 +225,12 @@ func (rf *Raft) mainLoop() {
 	// if state == Leader, send out heart beats
 	// if state == Follower, if havent heard from leader in time start vote
 	for {
+		time.Sleep(10 * time.Millisecond)
+		rf.mu.Lock()
+		state := rf.state
+		rf.mu.Unlock()
 
-		switch rf.state {
+		switch state {
 		case Leader:
 			time.Sleep(rf.setHeartbeatTimeout())
 			rf.sendHeartbeats()
