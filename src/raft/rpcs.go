@@ -26,7 +26,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	}
 
 	// if candidate hasn't voted or has already voted for candidate
-	isCandidateValid := !rf.votedFor.hasVoted || rf.votedFor.candidateId == args.CandidateId
+	isCandidateValid := rf.votedFor != -1 || rf.votedFor == args.CandidateId
 	isLogValid := rf.lastAppliedIndex <= args.LastLogIndex && len(rf.log) <= args.LastLogTerm
 
 	if isCandidateValid && isLogValid {

@@ -2,6 +2,10 @@ package raft
 
 import "math"
 
+// Implements the election-related functionalities.
+// Includes the startElection function and the logic
+// for handling votes and becoming a leader.
+
 // example code to send a RequestVote RPC to a server.
 // server is the index of the target server in rf.peers[].
 // expects RPC arguments in args.
@@ -66,7 +70,7 @@ func (rf *Raft) startElection() {
 
 	rf.state = Candidate
 	rf.currentTerm++
-	rf.votedFor = VotedFor{rf.me, true}
+	rf.votedFor = rf.me
 	rf.resetElectionTimeout()
 	Debugf("rf: %d in election\n", rf.me)
 
