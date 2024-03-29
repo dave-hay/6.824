@@ -104,45 +104,6 @@ type Log struct {
 	Term    int    // term when entry was recieved by leader; first index is 1
 }
 
-func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
-	rf.mu.Lock()
-	args := &AppendEntriesArgs{
-		Term:         rf.currentTerm,
-		LeaderId:     rf.me,
-		PrevLogIndex: len(rf.log),
-		PrevLogTerm:  len(rf.log),
-		LeaderCommit: rf.commitIndex,
-	}
-	rf.mu.Unlock()
-
-	if isHeartbeat {
-		args.Entries = make([]Log, 0)
-	}
-
-	reply := &AppendEntriesReply{}
-
-	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-
-	if !ok {
-		return
-	}
-
-	if reply.Success {
-		// TODO: Update nextIndex and matchIndex for the follower
-		// TODO: Check if we can commit new entries
-	} else if reply.Term > rf.currentTerm {
-		rf.convertToFollower()
-	}
-}
-
-func (rf *Raft) sendHeartbeats() {
-	for server := range len(rf.peers) {
-		if server != rf.me {
-			go rf.sendAppendEntries(server, true)
-		}
-	}
-}
-
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
@@ -159,25 +120,6 @@ func (rf *Raft) convertToFollower() {
 	rf.state = Follower
 	rf.votedFor = VotedFor{-1, false}
 	rf.resetElectionTimeout()
-}
-
-// Start agreement to append command to replicated log
-func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := false
-
-	// if not leader return
-	// rf.mu.Lock()
-	// if rf.state == Leader {
-	// 	index = rf.commitIndex
-	// 	term = rf.currentTerm
-	// 	isLeader = true
-	// 	return index, term, isLeader
-	// }
-	// rf.mu.Unlock()
-
-	return index, term, isLeader
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
@@ -217,33 +159,6 @@ func (rf *Raft) timeSinceElectionTimeout() time.Duration {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	return time.Since(rf.electionTimeout)
-}
-
-func (rf *Raft) mainLoop() {
-
-	// while not dead
-	// if state == Leader, send out heart beats
-	// if state == Follower, if havent heard from leader in time start vote
-	for {
-		time.Sleep(10 * time.Millisecond)
-		rf.mu.Lock()
-		state := rf.state
-		rf.mu.Unlock()
-
-		switch state {
-		case Leader:
-			time.Sleep(rf.setHeartbeatTimeout())
-			rf.sendHeartbeats()
-		default:
-			timeOutlength := rf.setElectionTimeout()
-			time.Sleep(timeOutlength)
-			if timeOutlength < rf.timeSinceElectionTimeout() {
-				Debugf("rf: %d starting election\n", rf.me)
-				rf.startElection()
-				Debugf("rf: %d end of election\n", rf.me)
-			}
-		}
-	}
 }
 
 // the service or tester wants to create a Raft server. the ports
