@@ -39,7 +39,7 @@ func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
 	if reply.Success {
 		// TODO: Update nextIndex and matchIndex for the follower
 		// TODO: Check if we can commit new entries
-	} else if reply.Term > rf.currentTerm {
+	} else if reply.Term > args.Term {
 		rf.convertToFollower()
 	}
 }
