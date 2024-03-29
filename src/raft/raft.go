@@ -262,6 +262,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 	rf.state = Follower
+	rf.votedFor = VotedFor{-1, false}
 
 	if debug {
 		log.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
