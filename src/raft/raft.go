@@ -171,10 +171,10 @@ func (rf *Raft) mainLoop() {
 
 		switch state {
 		case Leader:
-			time.Sleep(rf.setHeartbeatTimeout())
+			time.Sleep(rf.getHeartbeatTimeout())
 			go rf.sendHeartbeats()
 		default:
-			timeOutlength := rf.setElectionTimeout()
+			timeOutlength := rf.getElectionTimeout()
 			time.Sleep(timeOutlength)
 			if timeOutlength < time.Since(rf.getLastResetTime()) {
 				Debugf("rf: %d starting election\n", rf.me)

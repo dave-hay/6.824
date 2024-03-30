@@ -91,13 +91,14 @@ func (rf *Raft) startElection() {
 // Sets state to Follower.
 // Resets voted for and election timeout
 func (rf *Raft) becomeFollower() {
+	// cancel all other RPCs
 	rf.state = Follower
 	rf.votedFor = -1
 	rf.resetLastResetTime()
 }
 
 func (rf *Raft) becomeLeader() {
-	rf.state = Follower
+	rf.state = Leader
 	rf.votedFor = rf.me
 	rf.resetLastResetTime()
 }

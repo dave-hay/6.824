@@ -7,11 +7,11 @@ import (
 )
 
 // Time
-func (rf *Raft) setHeartbeatTimeout() time.Duration {
+func (rf *Raft) getHeartbeatTimeout() time.Duration {
 	return time.Duration(rand.Intn(150)+150) * time.Millisecond
 }
 
-func (rf *Raft) setElectionTimeout() time.Duration {
+func (rf *Raft) getElectionTimeout() time.Duration {
 	return time.Duration(rand.Intn(200)+400) * time.Millisecond
 }
 
