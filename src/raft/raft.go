@@ -90,7 +90,9 @@ type Raft struct {
 	matchIndex []int // for each server, index of highest log entry known to be replicated on server; initialized to 0
 
 	// Additional state
-	state         State     // Follower | Candidate | Leader
+	state State // Follower | Candidate | Leader
+
+	lrt           sync.RWMutex
 	lastResetTime time.Time // timestamp of the last election timeout reset
 }
 
@@ -145,14 +147,14 @@ func (rf *Raft) killed() bool {
 }
 
 func (rf *Raft) resetLastResetTime() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.lrt.Lock()
+	defer rf.lrt.Unlock()
 	rf.lastResetTime = time.Now()
 }
 
 func (rf *Raft) getLastResetTime() time.Time {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.lrt.RLock()
+	defer rf.lrt.RUnlock()
 	return rf.lastResetTime
 }
 
