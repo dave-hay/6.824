@@ -87,3 +87,17 @@ func (rf *Raft) startElection() {
 	}
 
 }
+
+// Sets state to Follower.
+// Resets voted for and election timeout
+func (rf *Raft) becomeFollower() {
+	rf.state = Follower
+	rf.votedFor = -1
+	rf.resetElectionTimeout()
+}
+
+func (rf *Raft) becomeLeader() {
+	rf.state = Follower
+	rf.votedFor = rf.me
+	rf.resetElectionTimeout()
+}

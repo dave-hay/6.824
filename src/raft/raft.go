@@ -21,7 +21,6 @@ package raft
 
 import (
 	"log"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -145,12 +144,18 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
-func (rf *Raft) setHeartbeatTimeout() time.Duration {
-	return time.Duration(rand.Intn(150)+150) * time.Millisecond
+func (rf *Raft) resetLastResetTime() {
+	rf.lastResetTime = time.Now()
 }
 
-func (rf *Raft) setElectionTimeout() time.Duration {
-	return time.Duration(rand.Intn(200)+400) * time.Millisecond
+func (rf *Raft) getLastResetTime() time.Time {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	return rf.lastResetTime
+}
+
+func (rf *Raft) getDurationSinceLastReset() time.Duration {
+	return time.Since(rf.getLastResetTime())
 }
 
 // Record the current time as the time when the election timeout should be reset.
@@ -182,7 +187,7 @@ func (rf *Raft) mainLoop() {
 		default:
 			timeOutlength := rf.setElectionTimeout()
 			time.Sleep(timeOutlength)
-			if timeOutlength < rf.timeSinceElectionTimeout() {
+			if timeOutlength < time.Since(rf.getLastResetTime()) {
 				Debugf("rf: %d starting election\n", rf.me)
 				rf.startElection()
 				Debugf("rf: %d end of election\n", rf.me)

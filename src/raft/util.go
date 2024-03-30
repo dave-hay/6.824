@@ -1,6 +1,19 @@
 package raft
 
-import "log"
+import (
+	"log"
+	"math/rand"
+	"time"
+)
+
+// Time
+func (rf *Raft) setHeartbeatTimeout() time.Duration {
+	return time.Duration(rand.Intn(150)+150) * time.Millisecond
+}
+
+func (rf *Raft) setElectionTimeout() time.Duration {
+	return time.Duration(rand.Intn(200)+400) * time.Millisecond
+}
 
 // Debugging
 const Debug = 0
