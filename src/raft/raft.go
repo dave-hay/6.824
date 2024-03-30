@@ -91,9 +91,8 @@ type Raft struct {
 	matchIndex []int // for each server, index of highest log entry known to be replicated on server; initialized to 0
 
 	// Additional state
-	state           State     // Follower | Candidate | Leader
-	electionTimeout time.Time // length of election timeout
-	lastResetTime   time.Time // timestamp of the last election timeout reset
+	state         State     // Follower | Candidate | Leader
+	lastResetTime time.Time // timestamp of the last election timeout reset
 }
 
 func (rf *Raft) getCurrentTerm() int {
@@ -156,13 +155,13 @@ func (rf *Raft) setElectionTimeout() time.Duration {
 
 // Record the current time as the time when the election timeout should be reset.
 func (rf *Raft) resetElectionTimeout() {
-	rf.electionTimeout = time.Now()
+	rf.lastResetTime = time.Now()
 }
 
 func (rf *Raft) timeSinceElectionTimeout() time.Duration {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	return time.Since(rf.electionTimeout)
+	return time.Since(rf.lastResetTime)
 }
 
 func (rf *Raft) mainLoop() {
