@@ -121,7 +121,7 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) convertToFollower() {
 	rf.state = Follower
 	rf.votedFor = -1
-	rf.resetElectionTimeout()
+	rf.resetLastResetTime()
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
@@ -145,6 +145,8 @@ func (rf *Raft) killed() bool {
 }
 
 func (rf *Raft) resetLastResetTime() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	rf.lastResetTime = time.Now()
 }
 
@@ -152,21 +154,6 @@ func (rf *Raft) getLastResetTime() time.Time {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	return rf.lastResetTime
-}
-
-func (rf *Raft) getDurationSinceLastReset() time.Duration {
-	return time.Since(rf.getLastResetTime())
-}
-
-// Record the current time as the time when the election timeout should be reset.
-func (rf *Raft) resetElectionTimeout() {
-	rf.lastResetTime = time.Now()
-}
-
-func (rf *Raft) timeSinceElectionTimeout() time.Duration {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	return time.Since(rf.lastResetTime)
 }
 
 func (rf *Raft) mainLoop() {
@@ -224,7 +211,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// when it hasn't heard from another peer for a while. This way a peer
 	// will learn who is the leader, if there is already a leader, or become the leader itself.
 
-	rf.resetElectionTimeout()
+	rf.resetLastResetTime()
 	go rf.mainLoop()
 
 	// initialize from state persisted before a crash

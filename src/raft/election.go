@@ -71,7 +71,7 @@ func (rf *Raft) startElection() {
 	rf.state = Candidate
 	rf.currentTerm++
 	rf.votedFor = rf.me
-	rf.resetElectionTimeout()
+	rf.resetLastResetTime()
 	Debugf("rf: %d in election\n", rf.me)
 
 	totalVotes := rf.sendVotes()
@@ -93,11 +93,11 @@ func (rf *Raft) startElection() {
 func (rf *Raft) becomeFollower() {
 	rf.state = Follower
 	rf.votedFor = -1
-	rf.resetElectionTimeout()
+	rf.resetLastResetTime()
 }
 
 func (rf *Raft) becomeLeader() {
 	rf.state = Follower
 	rf.votedFor = rf.me
-	rf.resetElectionTimeout()
+	rf.resetLastResetTime()
 }
