@@ -42,6 +42,11 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
+type LogEntry struct {
+	term    int
+	command interface{}
+}
+
 type State int
 
 const (
@@ -57,6 +62,11 @@ type Raft struct {
 	persister *Persister          // Object to hold this peer's persisted state
 	me        int                 // this peer's index into peers[]
 	dead      int32               // set by Kill()
+
+	// persistent state
+	currentTerm int        // latest term server has seen; 0 default
+	votedFor    int        // candidateId recieved vote in cur term; -1 if none
+	logs        []LogEntry // first index 1
 
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
@@ -134,6 +144,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.persister = persister
 	rf.me = me
 	rf.state = Follower
+	rf.votedFor = -1
+	rf.currentTerm = 0
+	rf.logs = append(rf.logs, LogEntry{})
 
 	// Your initialization code here (2A, 2B, 2C).
 
