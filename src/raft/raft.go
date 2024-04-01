@@ -68,6 +68,10 @@ type Raft struct {
 	votedFor    int        // candidateId recieved vote in cur term; -1 if none
 	logs        []LogEntry // first index 1
 
+	// volatile state
+	commitIndex int // highest log entry known
+	lastApplied int // index of highest log entry applied to state machine
+
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
@@ -139,13 +143,16 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // for any long-running work.
 func Make(peers []*labrpc.ClientEnd, me int,
 	persister *Persister, applyCh chan ApplyMsg) *Raft {
-	rf := &Raft{}
-	rf.peers = peers
-	rf.persister = persister
-	rf.me = me
-	rf.state = Follower
-	rf.votedFor = -1
-	rf.currentTerm = 0
+	rf := &Raft{
+		peers:       peers,
+		persister:   persister,
+		me:          me,
+		state:       Follower,
+		votedFor:    -1,
+		currentTerm: 0,
+		commitIndex: 0,
+		lastApplied: 0,
+	}
 	rf.logs = append(rf.logs, LogEntry{})
 
 	// Your initialization code here (2A, 2B, 2C).
