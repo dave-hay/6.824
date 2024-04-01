@@ -92,16 +92,16 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isleader
 }
 
-// example RequestVote RPC arguments structure.
-// field names must start with capital letters!
 type RequestVoteArgs struct {
-	// Your data here (2A, 2B).
+	CandidateTerm         int
+	CandidateId           int
+	CandidateLastLogIndex int
+	CandidateLastLogTerm  int
 }
 
-// example RequestVote RPC reply structure.
-// field names must start with capital letters!
 type RequestVoteReply struct {
-	// Your data here (2A).
+	Term        int
+	voteGranted int
 }
 
 // example RequestVote RPC handler.
