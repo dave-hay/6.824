@@ -101,12 +101,17 @@ type RequestVoteArgs struct {
 
 type RequestVoteReply struct {
 	Term        int
-	voteGranted int
+	voteGranted bool
 }
 
 // example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	// Your code here (2A, 2B).
+	// if candidates term < voters term; candidate becomes follower
+	if args.CandidateTerm < rf.currentTerm {
+		reply.Term = rf.currentTerm
+		reply.voteGranted = false
+		return 
+	}
 }
 
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
