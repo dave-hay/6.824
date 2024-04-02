@@ -25,10 +25,9 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 	return
 }
 
-var debug bool = false
-
-func Debugf(format string, v ...interface{}) {
-	if debug {
-		log.Printf(format, v...)
+func DPrintln(text string) (n int, err error) {
+	if Debug > 0 {
+		log.Println(text)
 	}
+	return
 }
