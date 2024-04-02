@@ -44,8 +44,8 @@ type ApplyMsg struct {
 }
 
 type LogEntry struct {
-	term    int
-	command interface{}
+	Term    int
+	Command interface{}
 }
 
 type State int
@@ -119,7 +119,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		commitIndex: 0,
 		lastApplied: 0,
 	}
-	rf.logs = append(rf.logs, LogEntry{})
+	rf.logs = append(rf.logs, LogEntry{Term: 0})
 
 	// Your initialization code here (2A, 2B, 2C).
 
