@@ -76,8 +76,8 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
-	state              State
-	lastHeardFromLeader time.Time 
+	state               State
+	lastHeardFromLeader time.Time
 }
 
 // return currentTerm and whether this server
@@ -94,46 +94,9 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isleader
 }
 
-type RequestVoteArgs struct {
-	CandidateTerm         int
-	CandidateId           int
-	CandidateLastLogIndex int
-	CandidateLastLogTerm  int
-}
-
-type RequestVoteReply struct {
-	Term        int
-	voteGranted bool
-}
-
-// receiver of request vote
-func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
-	// if candidates term < voters term; candidate becomes follower
-	if args.CandidateTerm < rf.currentTerm {
-		reply.Term = rf.currentTerm
-		reply.voteGranted = false
-		return
-	}
-
-	isVoterValid := rf.votedFor == -1 || rf.votedFor == args.CandidateId
-	// candidates log is at least as up to date as voters log
-	isCandidateValid := args.CandidateLastLogIndex >= len(rf.logs)-1
-
-	if isVoterValid && isCandidateValid {
-		rf.currentTerm = reply.Term
-		reply.voteGranted = true
-	}
-
-}
-
-// initiated by candidates during election
-func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	return ok
-}
+// TODO: leaderLoop: send heartbeats
+// TODO: followerLoop: start election if too much time has passed
+// TODO: mainLoop
 
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
@@ -236,6 +199,8 @@ func (rf *Raft) Kill() {
 	// Your code here, if desired.
 }
 
+// You may want to call in all loops, to avoid having dead Raft
+// instances print confusing messages.
 func (rf *Raft) killed() bool {
 	z := atomic.LoadInt32(&rf.dead)
 	return z == 1
