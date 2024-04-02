@@ -1,5 +1,7 @@
 package raft
 
+import "time"
+
 type AppendEntriesArgs struct {
 	LeaderTerm         int
 	LeaderId           int
@@ -30,6 +32,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	curPrevLogIndex := len(rf.logs) - 1
 
+	// reset so leader keeps authority
+	rf.lastHeardFromLeader = time.Now()
+	rf.votedFor = -1
+	rf.state = Follower
+
 	// If leader's prevLogTerm != follower's prevLogTerm:
 	// reply false and delete all existing entries from prevLogIndex forward
 	if args.LeaderPrevLogIndex <= curPrevLogIndex &&
@@ -49,3 +56,5 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.commitIndex = min(args.LeaderCommitIndex, curPrevLogIndex)
 
 }
+
+// TODO: send heartbeats
