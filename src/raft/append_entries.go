@@ -101,16 +101,13 @@ func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
 	rf.mu.Unlock()
 }
 
-// type AppendEntriesArgs struct {
-// 	LeaderTerm         int
-// 	LeaderId           int
-// 	LeaderPrevLogIndex int
-// 	LeaderPrevLogTerm  int
-// 	LeaderLogEntries   []LogEntry
-// 	LeaderCommitIndex  int
-// }
+// sendHeartbeats method
+// triggered by leader sending empty AppendEntries RPCs to followers
+func (rf *Raft) sendHeartbeats() {
+	for serverId := range len(rf.peers) {
+		if serverId != rf.me {
+			go rf.sendAppendEntries(serverId, true)
+		}
+	}
 
-// type AppendEntriesReply struct {
-// 	Term    int
-// 	Success bool
-// }
+}
