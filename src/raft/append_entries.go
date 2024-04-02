@@ -42,6 +42,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// if empty LogEntires it is a heartbeat
 	if len(args.LeaderLogEntries) > 0 {
 		// TODO: append new entries not already in the log
+		DPrintln("append new entries not already in the log")
 	}
 
 	// update commitIndex with highest known log entry
