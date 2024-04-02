@@ -20,6 +20,7 @@ package raft
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"6.824/labrpc"
 )
@@ -75,7 +76,8 @@ type Raft struct {
 	// Your data here (2A, 2B, 2C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
-	state State
+	state              State
+	lastHeardFromLeader time.Time 
 }
 
 // return currentTerm and whether this server
