@@ -95,6 +95,12 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isleader
 }
 
+func (rf *Raft) getState() State {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	return rf.state
+}
+
 func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -103,20 +109,22 @@ func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 
 // leaderLoop: send heartbeats
 func (rf *Raft) leaderLoop() {
-	DPrintf("raft %d: starting leaderLoop", rf.me)
-	time.Sleep(rf.getHeartbeatTimeout())
-	go rf.sendHeartbeats()
+	for !rf.killed() && rf.getState() == Leader {
+		time.Sleep(rf.getHeartbeatTimeout())
+		go rf.sendHeartbeats()
+	}
 }
 
 // followerLoop: start election if too much time has passed
 func (rf *Raft) followerLoop() {
-	DPrintf("raft %d: starting followerLoop", rf.me)
-	electionTimeout := rf.getElectionTimeout()
-	time.Sleep(electionTimeout)
+	for !rf.killed() && rf.getState() != Leader {
+		electionTimeout := rf.getElectionTimeout()
+		time.Sleep(electionTimeout)
 
-	// if follower hasn't hear from leader during this time call election
-	if time.Since(rf.getTimeLastHeardFromLeader()) > electionTimeout {
-		go rf.startElection()
+		// if follower hasn't hear from leader during this time call election
+		if time.Since(rf.getTimeLastHeardFromLeader()) > electionTimeout {
+			go rf.startElection()
+		}
 	}
 }
 
@@ -134,6 +142,7 @@ func (rf *Raft) mainLoop() {
 
 		time.Sleep(10 * time.Millisecond)
 	}
+	DPrintf("raft %d: died", rf.me)
 }
 
 // the service or tester wants to create a Raft server. the ports
