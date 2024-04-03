@@ -123,7 +123,8 @@ func (rf *Raft) startElection() {
 		rf.mu.Lock()
 		rf.state = Leader
 		rf.mu.Unlock()
-		rf.sendHeartbeats()
+		DPrintf("raft %d: now leader", rf.me)
+		go rf.sendHeartbeats()
 	}
 	// Outcome 3: repeat election
 }
