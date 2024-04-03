@@ -11,7 +11,7 @@ type RequestVoteArgs struct {
 
 type RequestVoteReply struct {
 	Term        int
-	voteGranted bool
+	VoteGranted bool
 }
 
 // RequestVote RPC
@@ -24,7 +24,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// if candidates term < voters term; candidate becomes follower
 	if args.CandidateTerm < rf.currentTerm {
 		reply.Term = rf.currentTerm
-		reply.voteGranted = false
+		reply.VoteGranted = false
 		return
 	}
 
@@ -34,7 +34,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	if isVoterValid && isCandidateValid {
 		rf.currentTerm = reply.Term
-		reply.voteGranted = true
+		reply.VoteGranted = true
 	}
 
 }
@@ -66,7 +66,7 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, errChannel cha
 		return
 	}
 
-	if reply.voteGranted {
+	if reply.VoteGranted {
 		voteChannel <- 1
 	} else if reply.Term > args.CandidateTerm {
 		//  Another server is leader: return to follower state
@@ -113,6 +113,8 @@ func (rf *Raft) startElection() {
 		select {
 		case vote := <-voteChannel:
 			voteCount += vote
+		case serverId := <-errChannel:
+			DPrintf("error voting; serverId %d", serverId)
 		}
 	}
 
