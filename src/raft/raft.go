@@ -68,6 +68,7 @@ type Raft struct {
 	currentTerm int        // latest term server has seen; 0 default
 	votedFor    int        // candidateId recieved vote in cur term; -1 if none
 	logs        []LogEntry // first index 1
+	// logIndex of len(logs) - 1
 
 	// volatile state
 	commitIndex int // highest log entry known
@@ -94,9 +95,43 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isleader
 }
 
-// TODO: leaderLoop: send heartbeats
-// TODO: followerLoop: start election if too much time has passed
-// TODO: mainLoop
+func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	return rf.lastHeardFromLeader
+}
+
+// leaderLoop: send heartbeats
+func (rf *Raft) leaderLoop() {
+	time.Sleep(rf.getHeartbeatTimeout())
+	go rf.sendHeartbeats()
+}
+
+// followerLoop: start election if too much time has passed
+func (rf *Raft) followerLoop() {
+	electionTimeout := rf.getElectionTimeout()
+	time.Sleep(electionTimeout)
+
+	// if follower hasn't hear from leader during this time call election
+	if electionTimeout > time.Since(rf.getTimeLastHeardFromLeader()) {
+		go rf.startElection()
+	}
+}
+
+// mainLoop
+func (rf *Raft) mainLoop() {
+	for !rf.killed() {
+		_, isleader := rf.GetState()
+		switch isleader {
+		case true:
+			rf.leaderLoop()
+		default:
+			rf.followerLoop()
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+}
 
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
@@ -122,6 +157,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.logs = append(rf.logs, LogEntry{Term: 0})
 
 	// Your initialization code here (2A, 2B, 2C).
+	go rf.mainLoop()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
