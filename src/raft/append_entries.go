@@ -36,6 +36,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.lastHeardFromLeader = time.Now()
 	rf.votedFor = -1
 	rf.state = Follower
+	rf.currentTerm = args.LeaderTerm
 
 	// If leader's prevLogTerm != follower's prevLogTerm:
 	// reply false and delete all existing entries from prevLogIndex forward
