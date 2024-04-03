@@ -44,7 +44,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 // sendRequestVote method
 // called by candidates during election to request a vote from a Raft instance
-func (rf *Raft) sendRequestVote(server int, voteChannel chan int, errChannel chan int) {
+func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChannel chan bool) {
 
 	rf.mu.Lock()
 	args := &RequestVoteArgs{
@@ -62,7 +62,7 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, errChannel cha
 
 	if !ok {
 		//  !ok means that there was an error and should re-send the request vote
-		errChannel <- server
+		voteChannel <- 0
 		return
 	}
 
@@ -79,13 +79,12 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, errChannel cha
 		rf.state = Follower
 		rf.currentTerm = reply.Term
 		rf.mu.Unlock()
+		isFollowerChannel <- true
+		return
 	}
 
 	voteChannel <- 0
 }
-
-// TODO: send votes function
-// should be used for all peers or just the ones that failed
 
 // startElection method
 // called by follower if no communication received by leader
@@ -106,13 +105,13 @@ func (rf *Raft) startElection() {
 	rf.lastHeardFromLeader = time.Now()
 
 	voteChannel := make(chan int, peerCount-1)
-	errChannel := make(chan int, peerCount-1)
+	isFollowerChannel := make(chan bool, peerCount-1)
 	rf.mu.Unlock()
 
 	// issues `RequestVote RPCs` in parallel
 	for server := range peerCount {
 		if server != instanceId {
-			go rf.sendRequestVote(server, voteChannel, errChannel)
+			go rf.sendRequestVote(server, voteChannel, isFollowerChannel)
 		}
 	}
 
@@ -120,9 +119,10 @@ func (rf *Raft) startElection() {
 		select {
 		case vote := <-voteChannel:
 			voteCount += vote
-		case serverId := <-errChannel:
-			// TODO: handle error
-			DPrintf("error voting; serverId %d", serverId)
+		case <-isFollowerChannel:
+			voteCount = 0
+			DPrintf("raft %d: candidate -> follower", rf.me)
+			return
 		}
 	}
 
@@ -133,6 +133,7 @@ func (rf *Raft) startElection() {
 		rf.mu.Unlock()
 		DPrintf("raft %d: now leader", rf.me)
 		go rf.sendHeartbeats()
+		return
 	}
 	// Outcome 3: repeat election
 }
