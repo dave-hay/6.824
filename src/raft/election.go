@@ -80,6 +80,9 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, errChannel cha
 	voteChannel <- 0
 }
 
+// TODO: send votes function
+// should be used for all peers or just the ones that failed
+
 // startElection method
 // called by follower if no communication received by leader
 // over election timeout.
@@ -95,7 +98,7 @@ func (rf *Raft) startElection() {
 	peerCount := len(rf.peers)
 	instanceId := rf.me
 	votesNeeded := (peerCount / 2) + 1
-	voteCount := 0
+	voteCount := 1
 	rf.lastHeardFromLeader = time.Now()
 
 	voteChannel := make(chan int, peerCount-1)
@@ -114,6 +117,7 @@ func (rf *Raft) startElection() {
 		case vote := <-voteChannel:
 			voteCount += vote
 		case serverId := <-errChannel:
+			// TODO: handle error
 			DPrintf("error voting; serverId %d", serverId)
 		}
 	}
