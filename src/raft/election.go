@@ -68,7 +68,10 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, errChannel cha
 
 	if reply.VoteGranted {
 		voteChannel <- 1
-	} else if reply.Term > args.CandidateTerm {
+		return
+	}
+
+	if reply.Term > args.CandidateTerm {
 		//  Another server is leader: return to follower state
 		rf.mu.Lock()
 		rf.lastHeardFromLeader = time.Now()
@@ -77,6 +80,7 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, errChannel cha
 		rf.currentTerm = reply.Term
 		rf.mu.Unlock()
 	}
+
 	voteChannel <- 0
 }
 
