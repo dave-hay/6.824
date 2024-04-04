@@ -180,24 +180,33 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	return rf
 }
 
+// Start()
 // the service using Raft (e.g. a k/v server) wants to start
-// agreement on the next command to be appended to Raft's log. if this
-// server isn't the leader, returns false. otherwise start the
-// agreement and return immediately. there is no guarantee that this
-// command will ever be committed to the Raft log, since the leader
-// may fail or lose an election. even if the Raft instance has been killed,
-// this function should return gracefully.
+// agreement on the next command to be appended to Raft's log.
+// start the agreement and return immediately.
+// no guarantee command will be committed to the Raft log
 //
-// the first return value is the index that the command will appear at
-// if it's ever committed. the second return value is the current
-// term. the third return value is true if this server believes it is
-// the leader.
+// index (int): index the command will appear if commited. len(rf.logs) + 1
+// term (int): current term
+// isLeader (bool): if server is leader
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index := -1
 	term := -1
-	isLeader := true
+	isLeader := false
 
-	// Your code here (2B).
+	if rf.getState() != Leader {
+		return index, term, isLeader
+	}
+
+	rf.mu.Lock()
+	term = rf.currentTerm
+	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
+	index = len(rf.logs)
+	isLeader = true
+	rf.mu.Unlock()
+
+	// fire off AppendEntries
+	go rf.sendLogEntries()
 
 	return index, term, isLeader
 }
