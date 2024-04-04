@@ -20,9 +20,11 @@ type RequestVoteReply struct {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	DPrintf("raft %d; RequestVote; received initialization from %d", rf.me, args.CandidateId)
 
 	// if candidates term < voters term; candidate becomes follower
 	if args.CandidateTerm < rf.currentTerm {
+		DPrintf("raft %d; RequestVote; candidate %d should step down", rf.me, args.CandidateId)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
@@ -33,10 +35,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	isCandidateValid := args.CandidateLastLogIndex >= len(rf.logs)-1
 
 	if isVoterValid && isCandidateValid {
+		DPrintf("raft %d; RequestVote; voted for candidate %d", rf.me, args.CandidateId)
 		rf.currentTerm = reply.Term
 		reply.VoteGranted = true
 	}
-
 }
 
 // leaders must check that the term hasn't changed since sending the RPC
@@ -45,7 +47,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // sendRequestVote method
 // called by candidates during election to request a vote from a Raft instance
 func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChannel chan bool) {
-
 	rf.mu.Lock()
 	args := &RequestVoteArgs{
 		CandidateId:           rf.me,
@@ -56,34 +57,31 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 	reply := &RequestVoteReply{}
 	rf.mu.Unlock()
 
-	// keep calling while error
-	// keep calling until timeout
+	DPrintf("raft %d; sendRequestVote; sending to %d", rf.me, server)
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+	DPrintf("raft %d; sendRequestVote; received reply from %d", rf.me, server)
 
 	if !ok {
 		//  !ok means that there was an error and should re-send the request vote
 		voteChannel <- 0
-		return
+	} else {
+		if reply.Term > args.CandidateTerm {
+			//  Another server is leader: return to follower state
+			rf.mu.Lock()
+			rf.lastHeardFromLeader = time.Now()
+			rf.votedFor = -1
+			rf.state = Follower
+			rf.currentTerm = reply.Term
+			rf.mu.Unlock()
+			isFollowerChannel <- true
+			return
+		} else if reply.VoteGranted {
+			voteChannel <- 1
+		} else {
+			voteChannel <- 0
+		}
 	}
 
-	if reply.VoteGranted {
-		voteChannel <- 1
-		return
-	}
-
-	if reply.Term > args.CandidateTerm {
-		//  Another server is leader: return to follower state
-		rf.mu.Lock()
-		rf.lastHeardFromLeader = time.Now()
-		rf.votedFor = -1
-		rf.state = Follower
-		rf.currentTerm = reply.Term
-		rf.mu.Unlock()
-		isFollowerChannel <- true
-		return
-	}
-
-	voteChannel <- 0
 }
 
 // startElection method
@@ -96,17 +94,18 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 // 3) No win or lose: start over process
 func (rf *Raft) startElection() {
 	rf.mu.Lock()
+	DPrintf("raft %d: called startElection", rf.me)
 	rf.currentTerm++
 	rf.state = Candidate
+	rf.mu.Unlock()
+
 	peerCount := len(rf.peers)
 	instanceId := rf.me
 	votesNeeded := (peerCount / 2) + 1
 	voteCount := 1
-	rf.lastHeardFromLeader = time.Now()
 
 	voteChannel := make(chan int, peerCount-1)
 	isFollowerChannel := make(chan bool, peerCount-1)
-	rf.mu.Unlock()
 
 	// issues `RequestVote RPCs` in parallel
 	for server := range peerCount {
@@ -121,7 +120,7 @@ func (rf *Raft) startElection() {
 			voteCount += vote
 		case <-isFollowerChannel:
 			voteCount = 0
-			DPrintf("raft %d: candidate -> follower", rf.me)
+			DPrintf("raft %d; startElection; ending election, reverting to follower", rf.me)
 			return
 		}
 	}
@@ -131,7 +130,7 @@ func (rf *Raft) startElection() {
 		rf.mu.Lock()
 		rf.state = Leader
 		rf.mu.Unlock()
-		DPrintf("raft %d: now leader", rf.me)
+		DPrintf("raft %d; startElection; election won", rf.me)
 		go rf.sendHeartbeats()
 		return
 	}

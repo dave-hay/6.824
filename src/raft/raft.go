@@ -111,7 +111,9 @@ func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 func (rf *Raft) leaderLoop() {
 	for !rf.killed() && rf.getState() == Leader {
 		time.Sleep(rf.getHeartbeatTimeout())
-		go rf.sendHeartbeats()
+		rf.sendHeartbeats()
+
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -123,8 +125,10 @@ func (rf *Raft) followerLoop() {
 
 		// if follower hasn't hear from leader during this time call election
 		if time.Since(rf.getTimeLastHeardFromLeader()) > electionTimeout {
-			go rf.startElection()
+			rf.startElection()
 		}
+
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -132,9 +136,8 @@ func (rf *Raft) followerLoop() {
 func (rf *Raft) mainLoop() {
 	DPrintf("raft %d initiated", rf.me)
 	for !rf.killed() {
-		_, isleader := rf.GetState()
-		switch isleader {
-		case true:
+		switch rf.getState() {
+		case Leader:
 			rf.leaderLoop()
 		default:
 			rf.followerLoop()

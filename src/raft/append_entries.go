@@ -23,8 +23,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	// if leader term < follower term; leader becomes follower
+	DPrintf("raft %d: called AppendEntries invoked by %d", rf.me, args.LeaderId)
+
+	// let leader know it is behind if their term < instances
 	if args.LeaderTerm < rf.currentTerm {
+		DPrintf("AppendEntries %d ->: %d leader behind current; ", args.LeaderId, rf.me)
 		reply.Term = rf.currentTerm
 		reply.Success = false
 		return
@@ -58,6 +61,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// update commitIndex with highest known log entry
 	rf.commitIndex = min(args.LeaderCommitIndex, curPrevLogIndex)
 
+	DPrintf("AppendEntries %d ->: %d converted to follower;\n", args.LeaderId, rf.me)
 }
 
 // sendAppendEntries method
@@ -82,24 +86,27 @@ func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
 	reply := &AppendEntriesReply{}
 	rf.mu.Unlock()
 
+	DPrintf("raft %d: called sendAppendEntries -> %d\n", rf.me, server)
 	// unlocked while processing
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-
-	rf.mu.Lock()
+	DPrintf("raft %d: received sendAppendEntries <- %d\n", rf.me, server)
 
 	if !ok {
 		// TODO: retry; exponential backoff
 		return
 	}
 
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	// convert to follower
 	if !reply.Success && reply.Term > args.LeaderTerm {
+		DPrintf("raft %d: sendAppendEntries converted to follower\n", rf.me)
 		rf.currentTerm = reply.Term
 		rf.lastHeardFromLeader = time.Now()
 		rf.votedFor = -1
 		rf.state = Follower
 	}
-	rf.mu.Unlock()
 }
 
 // sendHeartbeats method
