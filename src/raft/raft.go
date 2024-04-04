@@ -74,11 +74,12 @@ type Raft struct {
 	commitIndex int // highest log entry known
 	lastApplied int // index of highest log entry applied to state machine
 
-	// Your data here (2A, 2B, 2C).
-	// Look at the paper's Figure 2 for a description of what
-	// state a Raft server must maintain.
 	state               State
 	lastHeardFromLeader time.Time
+
+	// leader only, volatile state
+	// contains information about follower servers
+	nextIndex []int // index of next log entry on server i; init to len(rf.logs) + 1
 }
 
 // return currentTerm and whether this server

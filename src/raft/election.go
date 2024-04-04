@@ -127,12 +127,31 @@ func (rf *Raft) startElection() {
 
 	// Outcome 1: elected to leader
 	if voteCount >= votesNeeded {
-		rf.mu.Lock()
-		rf.state = Leader
-		rf.mu.Unlock()
-		DPrintf("raft %d; startElection; election won", rf.me)
+		rf.becomeLeader()
 		go rf.sendHeartbeats()
 		return
 	}
 	// Outcome 3: repeat election
+}
+
+// becomeLeader() method
+// updates state to reflect Leader
+// initializes the new nextIndex[] array
+// state is locked until completed
+func (rf *Raft) becomeLeader() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	DPrintf("raft %d; becomeLeader; called", rf.me)
+
+	rf.state = Leader
+	peerCount := len(rf.peers)
+	val := len(rf.logs) + 1
+
+	newNextIndex := make([]int, peerCount)
+	for i := range peerCount {
+		newNextIndex[i] = val
+	}
+
+	rf.nextIndex = newNextIndex
 }
