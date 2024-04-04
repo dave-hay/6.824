@@ -8,7 +8,7 @@ import (
 
 // getHeartbeatTimeout
 func (rf *Raft) getHeartbeatTimeout() time.Duration {
-	return time.Duration(rand.Intn(100)+100) * time.Millisecond
+	return time.Duration(rand.Intn(50)+100) * time.Millisecond
 }
 
 func (rf *Raft) getElectionTimeout() time.Duration {
