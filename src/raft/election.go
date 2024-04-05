@@ -17,6 +17,7 @@ type RequestVoteReply struct {
 // RequestVote RPC
 // called by voter (current Raft instance) and is initiated by candidate requesting vote
 // voter determines if it will vote for candidate and returns reply
+// voter denies its vote if its own log is more up-to-date than that of the candidate.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -126,6 +127,7 @@ func (rf *Raft) startElection() {
 	}
 
 	// Outcome 1: elected to leader
+	// TODO: add in the select/case
 	if voteCount >= votesNeeded {
 		rf.becomeLeader()
 		go rf.sendHeartbeats()
