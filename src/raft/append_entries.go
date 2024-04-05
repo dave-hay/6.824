@@ -16,16 +16,19 @@ type AppendEntriesReply struct {
 	Success bool
 }
 
-func (rf *Raft) makeAppendEntriesArgs() *AppendEntriesArgs {
+// makeAppendEntriesArgs
+// uses nextIndex[server] - 1 for prev log index && term
+func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	args := &AppendEntriesArgs{
-		LeaderTerm:         rf.currentTerm,
-		LeaderId:           rf.me,
-		LeaderPrevLogIndex: len(rf.logs) - 1,
-		LeaderPrevLogTerm:  rf.logs[len(rf.logs)-1].Term,
+		LeaderTerm:        rf.currentTerm,
+		LeaderId:          rf.me,
+		LeaderCommitIndex: rf.commitIndex,
+		// below only necessary for appending logs
+		LeaderPrevLogIndex: rf.nextIndex[server] - 1,
+		LeaderPrevLogTerm:  rf.logs[rf.nextIndex[server]-1].Term,
 		LeaderLogEntries:   rf.logs,
-		LeaderCommitIndex:  rf.commitIndex,
 	}
 	return args
 }
@@ -80,9 +83,59 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	DPrintf("AppendEntries %d ->: %d converted to follower;\n", args.LeaderId, rf.me)
 }
 
+// sendAppendEntry method
+// single non-heartbeat AppendEntries RPC
+// server (int) defines serverId RPC is for
+func (rf *Raft) sendAppendEntry(server int) {
+
+	for !rf.killed() {
+		args := rf.makeAppendEntriesArgs(server)
+		reply := &AppendEntriesReply{}
+
+		DPrintf("raft %d: called sendAppendEntries -> %d\n", rf.me, server)
+		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+		DPrintf("raft %d: received sendAppendEntries <- %d\n", rf.me, server)
+
+		if !ok {
+			continue
+		}
+
+		if reply.Success {
+			break
+		}
+
+		// convert to follower; dont retry?
+		if reply.Term > args.LeaderTerm {
+			DPrintf("raft %d: sendAppendEntries converted to follower\n", rf.me)
+			rf.mu.Lock()
+			defer rf.mu.Unlock()
+			rf.currentTerm = reply.Term
+			rf.lastHeardFromLeader = time.Now()
+			rf.votedFor = -1
+			rf.state = Follower
+			break
+		}
+
+		rf.nextIndex[server]--
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// sendLogEntries
+func (rf *Raft) sendLogEntries() {
+	// TODO: determine qorum of logs sent to finalize commit
+	for serverId := range len(rf.peers) {
+		if serverId != rf.me {
+			go rf.sendAppendEntry(serverId)
+		}
+	}
+}
+
+// sendHeartbeat method: sends single heartbeat
+// server (int) defines serverId RPC is for
 func (rf *Raft) sendHeartbeat(server int) {
 
-	args := rf.makeAppendEntriesArgs()
+	args := rf.makeAppendEntriesArgs(server)
 	args.LeaderLogEntries = make([]LogEntry, 0)
 	reply := &AppendEntriesReply{}
 
@@ -103,67 +156,12 @@ func (rf *Raft) sendHeartbeat(server int) {
 	}
 }
 
-// sendAppendEntries method
-// server (int) defines serverId RPC is for
-// if isHeartbeat (bool) is true sets logEntries to empty array
-func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
-	rf.mu.Lock()
-
-	args := &AppendEntriesArgs{
-		LeaderTerm:         rf.currentTerm,
-		LeaderId:           rf.me,
-		LeaderPrevLogIndex: len(rf.logs) - 1,
-		LeaderPrevLogTerm:  rf.logs[len(rf.logs)-1].Term,
-		LeaderLogEntries:   rf.logs,
-		LeaderCommitIndex:  rf.commitIndex,
-	}
-
-	if isHeartbeat {
-		args.LeaderLogEntries = make([]LogEntry, 0)
-	}
-
-	reply := &AppendEntriesReply{}
-	rf.mu.Unlock()
-
-	DPrintf("raft %d: called sendAppendEntries -> %d\n", rf.me, server)
-	// unlocked while processing
-	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	DPrintf("raft %d: received sendAppendEntries <- %d\n", rf.me, server)
-
-	if !ok {
-		// TODO: retry; exponential backoff
-		return
-	}
-
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
-	// convert to follower
-	if !reply.Success && reply.Term > args.LeaderTerm {
-		DPrintf("raft %d: sendAppendEntries converted to follower\n", rf.me)
-		rf.currentTerm = reply.Term
-		rf.lastHeardFromLeader = time.Now()
-		rf.votedFor = -1
-		rf.state = Follower
-	}
-
-}
-
 // sendHeartbeats method
 // triggered by leader sending empty AppendEntries RPCs to followers
 func (rf *Raft) sendHeartbeats() {
 	for serverId := range len(rf.peers) {
 		if serverId != rf.me {
 			go rf.sendHeartbeat(serverId)
-		}
-	}
-}
-
-// sendLogEntries
-func (rf *Raft) sendLogEntries() {
-	for serverId := range len(rf.peers) {
-		if serverId != rf.me {
-			go rf.sendAppendEntries(serverId, false)
 		}
 	}
 }
