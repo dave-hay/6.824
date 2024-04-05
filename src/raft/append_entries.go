@@ -86,7 +86,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // sendAppendEntry method
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
-func (rf *Raft) sendAppendEntry(server int) {
+func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
 
 	for !rf.killed() {
 		args := rf.makeAppendEntriesArgs(server)
@@ -101,19 +101,21 @@ func (rf *Raft) sendAppendEntry(server int) {
 		}
 
 		if reply.Success {
-			break
+			replicationChan <- 1
+			return
 		}
 
 		// convert to follower; dont retry?
 		if reply.Term > args.LeaderTerm {
 			DPrintf("raft %d: sendAppendEntries converted to follower\n", rf.me)
 			rf.mu.Lock()
-			defer rf.mu.Unlock()
 			rf.currentTerm = reply.Term
 			rf.lastHeardFromLeader = time.Now()
 			rf.votedFor = -1
 			rf.state = Follower
-			break
+			rf.mu.Unlock()
+			isFollower <- true
+			return
 		}
 
 		rf.nextIndex[server]--
@@ -131,7 +133,7 @@ func (rf *Raft) sendLogEntries() {
 
 	for serverId := range peerCount {
 		if serverId != rf.me {
-			go rf.sendAppendEntry(serverId)
+			go rf.sendAppendEntry(serverId, replicationChan, isFollower)
 		}
 	}
 
