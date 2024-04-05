@@ -80,6 +80,7 @@ type Raft struct {
 	// leader only, volatile state
 	// contains information about follower servers
 	nextIndex []int // index of next log entry on server i; init to len(rf.logs) + 1
+	applyCh   chan ApplyMsg
 }
 
 // return currentTerm and whether this server
@@ -169,6 +170,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		currentTerm: 0,
 		commitIndex: 0,
 		lastApplied: 0,
+		applyCh: applyCh,
 	}
 	rf.logs = append(rf.logs, LogEntry{Term: 0})
 
