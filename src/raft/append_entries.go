@@ -123,11 +123,34 @@ func (rf *Raft) sendAppendEntry(server int) {
 
 // sendLogEntries
 func (rf *Raft) sendLogEntries() {
-	// TODO: determine qorum of logs sent to finalize commit
-	for serverId := range len(rf.peers) {
+	peerCount := len(rf.peers)
+	replicationCount := 0
+	replicationsNeeded := (peerCount / 2)
+	replicationChan := make(chan int, peerCount-1)
+	isFollower := make(chan bool, peerCount-1)
+
+	for serverId := range peerCount {
 		if serverId != rf.me {
 			go rf.sendAppendEntry(serverId)
 		}
+	}
+
+	// determine quorum of logs sent to finalize commit
+	for range peerCount - 1 {
+		select {
+		case outcome := <-replicationChan:
+			replicationCount += outcome
+			if replicationsNeeded == replicationCount {
+				// TODO: not sure if correct; needs testing
+				rf.mu.Lock()
+				rf.commitIndex = max(rf.commitIndex, len(rf.logs))
+				rf.mu.Unlock()
+				return
+			}
+		case <-isFollower:
+			return
+		}
+
 	}
 }
 
