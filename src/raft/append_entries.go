@@ -33,33 +33,35 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	curPrevLogIndex := len(rf.logs) - 1
-
-	// reset so leader keeps authority
+	// reset follower so leader keeps authority
 	rf.lastHeardFromLeader = time.Now()
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = args.LeaderTerm
+	reply.Success = true
+
+	// if heartbeat; update commitIndex and return
+	if len(args.LeaderLogEntries) == 0 {
+		rf.commitIndex = max(rf.commitIndex, args.LeaderCommitIndex)
+		return
+	}
 
 	// If leader's prevLogTerm != follower's prevLogTerm:
 	// reply false and delete all existing entries from prevLogIndex forward
-	if args.LeaderPrevLogIndex <= curPrevLogIndex &&
+	if args.LeaderPrevLogIndex <= len(rf.logs)-1 &&
 		args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex].Term {
 		rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
 		reply.Success = false
 		return
 	}
 
-	reply.Success = true
-
-	// if empty LogEntires it is a heartbeat
-	if len(args.LeaderLogEntries) > 0 {
-		// TODO: append new entries not already in the log
-		DPrintln("append new entries not already in the log")
-	}
+	// append new entries not already in the log
+	rf.logs = append(rf.logs, args.LeaderLogEntries...)
 
 	// update commitIndex with highest known log entry
-	rf.commitIndex = min(args.LeaderCommitIndex, curPrevLogIndex)
+	if args.LeaderCommitIndex > rf.commitIndex {
+		rf.commitIndex = min(args.LeaderCommitIndex, len(rf.logs)-1)
+	}
 
 	DPrintf("AppendEntries %d ->: %d converted to follower;\n", args.LeaderId, rf.me)
 }
@@ -107,6 +109,7 @@ func (rf *Raft) sendAppendEntries(server int, isHeartbeat bool) {
 		rf.votedFor = -1
 		rf.state = Follower
 	}
+
 }
 
 // sendHeartbeats method
@@ -117,5 +120,13 @@ func (rf *Raft) sendHeartbeats() {
 			go rf.sendAppendEntries(serverId, true)
 		}
 	}
+}
 
+// sendLogEntries
+func (rf *Raft) sendLogEntries() {
+	for serverId := range len(rf.peers) {
+		if serverId != rf.me {
+			go rf.sendAppendEntries(serverId, false)
+		}
+	}
 }
