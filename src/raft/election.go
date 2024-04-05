@@ -146,7 +146,7 @@ func (rf *Raft) becomeLeader() {
 
 	rf.state = Leader
 	peerCount := len(rf.peers)
-	val := len(rf.logs) + 1
+	val := len(rf.logs) // last log index + 1
 
 	newNextIndex := make([]int, peerCount)
 	for i := range peerCount {

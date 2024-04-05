@@ -5,7 +5,7 @@ import "time"
 type AppendEntriesArgs struct {
 	LeaderTerm         int
 	LeaderId           int
-	LeaderPrevLogIndex int
+	LeaderPrevLogIndex int // nextIndex[followerId]
 	LeaderPrevLogTerm  int
 	LeaderLogEntries   []LogEntry
 	LeaderCommitIndex  int
