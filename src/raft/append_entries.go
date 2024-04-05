@@ -50,7 +50,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// reply false and delete all existing entries from prevLogIndex forward
 	if args.LeaderPrevLogIndex <= len(rf.logs)-1 &&
 		args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex].Term {
-		rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
+		rf.logs = rf.logs[:args.LeaderPrevLogIndex]
 		reply.Success = false
 		return
 	}
