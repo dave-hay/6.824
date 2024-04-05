@@ -155,3 +155,14 @@ func (rf *Raft) becomeLeader() {
 
 	rf.nextIndex = newNextIndex
 }
+
+// becomeFollower() method
+// currentTerm int: the most current term
+func (rf *Raft) becomeFollower(currentTerm int) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	rf.lastHeardFromLeader = time.Now()
+	rf.votedFor = -1
+	rf.state = Follower
+	rf.currentTerm = currentTerm
+}
