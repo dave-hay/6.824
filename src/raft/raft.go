@@ -38,7 +38,7 @@ import (
 // snapshots) on the applyCh; at that point you can add fields to
 // ApplyMsg, but set CommandValid to false for these other uses.
 type ApplyMsg struct {
-	CommandValid bool
+	CommandValid bool // true if contains newly commited log entry
 	Command      interface{}
 	CommandIndex int
 }
@@ -170,7 +170,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		currentTerm: 0,
 		commitIndex: 0,
 		lastApplied: 0,
-		applyCh: applyCh,
+		applyCh:     applyCh,
 	}
 	rf.logs = append(rf.logs, LogEntry{Term: 0})
 

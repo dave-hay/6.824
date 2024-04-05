@@ -125,6 +125,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 
 // sendLogEntries
 func (rf *Raft) sendLogEntries() {
+	var msg ApplyMsg
 	peerCount := len(rf.peers)
 	replicationCount := 0
 	replicationsNeeded := (peerCount / 2)
@@ -138,6 +139,7 @@ func (rf *Raft) sendLogEntries() {
 	}
 
 	// determine quorum of logs sent to finalize commit
+OuterLoop:
 	for range peerCount - 1 {
 		select {
 		case outcome := <-replicationChan:
@@ -146,14 +148,20 @@ func (rf *Raft) sendLogEntries() {
 				// TODO: not sure if correct; needs testing
 				rf.mu.Lock()
 				rf.commitIndex = max(rf.commitIndex, len(rf.logs))
+				msg = ApplyMsg{
+					CommandValid: true,
+					Command:      rf.logs[len(rf.logs)-1],
+					CommandIndex: len(rf.logs) - 1,
+				}
 				rf.mu.Unlock()
-				return
+				break OuterLoop
 			}
 		case <-isFollower:
-			return
+			break OuterLoop
 		}
-
 	}
+
+	rf.applyCh <- msg
 }
 
 // sendHeartbeat method: sends single heartbeat
