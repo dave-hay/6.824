@@ -9,7 +9,7 @@ import (
 
 // getHeartbeatTimeout
 func (rf *Raft) getHeartbeatTimeout() time.Duration {
-	return time.Duration(rand.Intn(50)+100) * time.Millisecond
+	return time.Duration(rand.Intn(100)+100) * time.Millisecond
 }
 
 func (rf *Raft) getElectionTimeout() time.Duration {
@@ -17,7 +17,7 @@ func (rf *Raft) getElectionTimeout() time.Duration {
 }
 
 // Debugging
-const Debug = 1
+const Debug = 0
 
 func DPrintf(format string, a ...interface{}) (n int, err error) {
 	if Debug > 0 {
