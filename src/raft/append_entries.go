@@ -39,8 +39,7 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-
-	DPrintf("raft %d: called AppendEntries invoked by %d", rf.me, args.LeaderId)
+	DPrint(rf.me, "AppendEntries RPC", "Called By %d; Heartbeat: %t; LeaderTerm: %d; CurrentTerm: %d", args.LeaderId, len(args.LeaderLogEntries) == 0, args.LeaderTerm, rf.currentTerm)
 
 	// let leader know it is behind if their term < instances
 	if args.LeaderTerm < rf.currentTerm {
@@ -80,34 +79,37 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.commitIndex = min(args.LeaderCommitIndex, len(rf.logs)-1)
 	}
 
-	DPrintf("AppendEntries %d ->: %d converted to follower;\n", args.LeaderId, rf.me)
+	DPrint(rf.me, "AppendEntries RPC", "Logs appended for %d; Heartbeat: false", args.LeaderId)
 }
 
 // sendAppendEntry method
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
+	DPrint(rf.me, "sendAppendEntry", "called for server %d", server)
 
 	for !rf.killed() {
 		args := rf.makeAppendEntriesArgs(server)
 		reply := &AppendEntriesReply{}
 
-		DPrintf("raft %d: called sendAppendEntries -> %d\n", rf.me, server)
+		DPrint(rf.me, "sendAppendEntry", "Initiating RPC for %d", server)
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-		DPrintf("raft %d: received sendAppendEntries <- %d\n", rf.me, server)
+		DPrint(rf.me, "sendAppendEntry", "Completed RPC for %d", server)
 
 		if !ok {
+			DPrint(rf.me, "sendAppendEntry", "RPC Error for %d", server)
 			continue
 		}
 
 		if reply.Success {
+			DPrint(rf.me, "sendAppendEntry", "RPC success for %d", server)
 			replicationChan <- 1
 			return
 		}
 
 		// convert to follower; dont retry?
 		if reply.Term > args.LeaderTerm {
-			DPrintf("raft %d: sendAppendEntries converted to follower\n", rf.me)
+			DPrint(rf.me, "sendAppendEntry", "Converting to follower")
 			rf.mu.Lock()
 			rf.currentTerm = reply.Term
 			rf.lastHeardFromLeader = time.Now()
@@ -119,12 +121,14 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		}
 
 		rf.nextIndex[server]--
+		DPrint(rf.me, "sendAppendEntry", "Repeating request %d", server)
 		time.Sleep(10 * time.Millisecond)
 	}
 }
 
 // sendLogEntries
 func (rf *Raft) sendLogEntries() {
+	DPrint(rf.me, "sendLogEntries", "called")
 	var msg ApplyMsg
 	peerCount := len(rf.peers)
 	replicationCount := 0
@@ -172,16 +176,17 @@ func (rf *Raft) sendHeartbeat(server int) {
 	args.LeaderLogEntries = make([]LogEntry, 0)
 	reply := &AppendEntriesReply{}
 
-	DPrintf("raft %d: called sendHeartbeat -> %d\n", rf.me, server)
+	DPrint(rf.me, "sendHearbeat", "sending to %d", server)
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	DPrintf("raft %d: received sendHeartbeat <- %d\n", rf.me, server)
+	DPrint(rf.me, "sendHearbeat", "recieved from %d", server)
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
 	// convert to follower
 	if ok && !reply.Success && reply.Term > args.LeaderTerm {
-		DPrintf("raft %d: sendAppendEntries converted to follower\n", rf.me)
+		DPrint(rf.me, "sendHearbeat", "converted to follower")
+
 		rf.currentTerm = reply.Term
 		rf.lastHeardFromLeader = time.Now()
 		rf.votedFor = -1
@@ -192,6 +197,7 @@ func (rf *Raft) sendHeartbeat(server int) {
 // sendHeartbeats method
 // triggered by leader sending empty AppendEntries RPCs to followers
 func (rf *Raft) sendHeartbeats() {
+	DPrint(rf.me, "sendHearbeatS", "isLeader=%t", rf.getState() == Leader)
 	for serverId := range len(rf.peers) {
 		if serverId != rf.me {
 			go rf.sendHeartbeat(serverId)
