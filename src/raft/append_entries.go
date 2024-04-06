@@ -171,7 +171,7 @@ OuterLoop:
 				rf.commitIndex = max(rf.commitIndex, len(rf.logs))
 				msg = ApplyMsg{
 					CommandValid: true,
-					Command:      rf.logs[len(rf.logs)-1],
+					Command:      rf.logs[len(rf.logs)-1].Command,
 					CommandIndex: len(rf.logs) - 1,
 				}
 				rf.mu.Unlock()
