@@ -82,6 +82,28 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	DPrint(rf.me, "AppendEntries RPC", "Logs appended for %d; Heartbeat: false", args.LeaderId)
 }
 
+// apply()
+// applies command to state machine
+func (rf *Raft) apply() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	index := len(rf.logs) - 1
+	msg := ApplyMsg{
+		CommandValid: true,
+		Command:      rf.logs[index].Command,
+		CommandIndex: index,
+	}
+
+	if msg.CommandIndex <= rf.lastApplied {
+		return
+	}
+
+	rf.lastApplied = index
+
+	rf.applyCh <- msg
+}
+
 // sendAppendEntry method
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
