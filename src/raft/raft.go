@@ -75,12 +75,13 @@ type Raft struct {
 	lastApplied int // index of highest log entry applied to state machine
 
 	state               State
+	applyCh             chan ApplyMsg
 	lastHeardFromLeader time.Time
+	logCh               chan LogEntry
 
 	// leader only, volatile state
 	// contains information about follower servers
 	nextIndex []int // index of next log entry on server i; init to len(rf.logs) + 1
-	applyCh   chan ApplyMsg
 }
 
 // return currentTerm and whether this server
@@ -193,6 +194,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 // term (int): current term
 // isLeader (bool): if server is leader
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
+	DPrint(rf.me, "Start()", "command: %v", command)
 	index := -1
 	term := -1
 	isLeader := false
@@ -206,7 +208,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
 	index = len(rf.logs) - 1
 	isLeader = rf.state == Leader
-	DPrint(rf.me, "sendLogEntries", "should be: %v; index: %d", rf.logs, index)
 	rf.mu.Unlock()
 
 	// fire off AppendEntries
