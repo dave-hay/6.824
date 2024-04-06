@@ -119,20 +119,23 @@ func (rf *Raft) startElection() {
 		select {
 		case vote := <-voteChannel:
 			voteCount += vote
+			// Outcome 1: elected to leader
+			if voteCount >= votesNeeded {
+				rf.becomeLeader()
+				go rf.sendHeartbeats()
+				return
+			}
 		case <-isFollowerChannel:
 			voteCount = 0
-			DPrintf("raft %d; startElection; ending election, reverting to follower", rf.me)
 			return
 		}
 	}
 
-	// Outcome 1: elected to leader
-	// TODO: add in the select/case
-	if voteCount >= votesNeeded {
-		rf.becomeLeader()
-		go rf.sendHeartbeats()
-		return
-	}
+	// if voteCount >= votesNeeded {
+	// 	rf.becomeLeader()
+	// 	go rf.sendHeartbeats()
+	// 	return
+	// }
 	// Outcome 3: repeat election
 }
 
@@ -141,26 +144,28 @@ func (rf *Raft) startElection() {
 // initializes the new nextIndex[] array
 // state is locked until completed
 func (rf *Raft) becomeLeader() {
+	DPrint(rf.me, "becomeLeader", "is now leader")
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
-	DPrintf("raft %d; becomeLeader; called", rf.me)
-
 	rf.state = Leader
-	peerCount := len(rf.peers)
 	val := len(rf.logs) // last log index + 1
+	rf.mu.Unlock()
 
+	peerCount := len(rf.peers)
 	newNextIndex := make([]int, peerCount)
+
 	for i := range peerCount {
 		newNextIndex[i] = val
 	}
 
+	rf.mu.Lock()
 	rf.nextIndex = newNextIndex
+	rf.mu.Unlock()
 }
 
 // becomeFollower() method
 // currentTerm int: the most current term
 func (rf *Raft) becomeFollower(currentTerm int) {
+	DPrint(rf.me, "becomeFollower", "is now follower")
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	rf.lastHeardFromLeader = time.Now()
