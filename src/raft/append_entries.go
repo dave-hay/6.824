@@ -110,12 +110,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		// convert to follower; dont retry?
 		if reply.Term > args.LeaderTerm {
 			DPrint(rf.me, "sendAppendEntry", "Converting to follower")
-			rf.mu.Lock()
-			rf.currentTerm = reply.Term
-			rf.lastHeardFromLeader = time.Now()
-			rf.votedFor = -1
-			rf.state = Follower
-			rf.mu.Unlock()
+			rf.becomeFollower(reply.Term)
 			isFollower <- true
 			return
 		}
@@ -171,7 +166,6 @@ OuterLoop:
 // sendHeartbeat method: sends single heartbeat
 // server (int) defines serverId RPC is for
 func (rf *Raft) sendHeartbeat(server int) {
-
 	args := rf.makeAppendEntriesArgs(server)
 	args.LeaderLogEntries = make([]LogEntry, 0)
 	reply := &AppendEntriesReply{}
@@ -180,17 +174,10 @@ func (rf *Raft) sendHeartbeat(server int) {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	DPrint(rf.me, "sendHearbeat", "recieved from %d", server)
 
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
 	// convert to follower
 	if ok && !reply.Success && reply.Term > args.LeaderTerm {
 		DPrint(rf.me, "sendHearbeat", "converted to follower")
-
-		rf.currentTerm = reply.Term
-		rf.lastHeardFromLeader = time.Now()
-		rf.votedFor = -1
-		rf.state = Follower
+		rf.becomeFollower(reply.Term)
 	}
 }
 
