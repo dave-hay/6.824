@@ -204,7 +204,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	term = rf.currentTerm
 	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
-	index = len(rf.logs)
+	index = len(rf.logs) - 1
 	isLeader = rf.state == Leader
 	rf.mu.Unlock()
 
