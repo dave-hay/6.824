@@ -206,6 +206,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
 	index = len(rf.logs) - 1
 	isLeader = rf.state == Leader
+	DPrint(rf.me, "sendLogEntries", "should be: %v; index: %d", rf.logs, index)
 	rf.mu.Unlock()
 
 	// fire off AppendEntries
