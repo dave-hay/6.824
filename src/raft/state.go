@@ -1,28 +1,54 @@
 package raft
 
-// apply()
-// applies command to state machine
-func (rf *Raft) apply(nextIndex int, leaderLogs []LogEntry) {
-	// rf.mu.Lock()
-	// defer rf.mu.Unlock()
-	newLogs := leaderLogs[nextIndex:]
-	DPrint(rf.me, "apply()", "current logs: %v; new logs: %v", rf.logs, newLogs)
+import (
+	"sync"
+)
 
-	// next index
-	if nextIndex <= rf.lastApplied {
-		return
+// for adding commands from start
+type LogQueue struct {
+	//lint:ignore U1000 Ignore unused function temporarily for debugging
+	indexes []int // where logs applied
+	cond    *sync.Cond
+}
+
+// logQueueProducer
+// when applying new entries
+//
+//lint:ignore U1000 Ignore unused function temporarily for debugging
+func (rf *Raft) logQueueProducer(index int) {
+	rf.logQueue.cond.L.Lock()
+	defer rf.logQueue.cond.L.Unlock()
+
+	// nextIndex i.e. where it should be applied
+	// if nextIndex <= rf.lastApplied {
+	// 	return
+	// }
+
+	rf.logQueue.indexes = append(
+		rf.logQueue.indexes,
+		index,
+	)
+}
+
+//lint:ignore U1000 Ignore unused function temporarily for debugging
+func (rf *Raft) logQueueConsumer() {
+	rf.logQueue.cond.L.Lock()
+	defer rf.logQueue.cond.L.Unlock()
+	for len(rf.logQueue.indexes) == 0 {
+		rf.logQueue.cond.Wait()
 	}
 
-	// append new entries not already in the log
-	rf.logs = append(rf.logs, newLogs...)
+	index := rf.logQueue.indexes[0]
+	rf.logQueue.indexes = rf.logQueue.indexes[1:]
+	DPrint(rf.me, "logQueueConsumer()", "processing: %v", index)
 
 	msg := ApplyMsg{
 		CommandValid: true,
-		Command:      rf.logs[nextIndex].Command,
-		CommandIndex: nextIndex,
+		Command:      rf.logs[index].Command,
+		CommandIndex: index,
 	}
 
-	rf.lastApplied = nextIndex
+	rf.lastApplied = index
 
 	rf.applyCh <- msg
 }
@@ -48,9 +74,10 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	rf.mu.Lock()
 	term = rf.currentTerm
+	isLeader = rf.state == Leader
 	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
 	index = len(rf.logs) - 1
-	isLeader = rf.state == Leader
+
 	rf.mu.Unlock()
 
 	// fire off AppendEntries
