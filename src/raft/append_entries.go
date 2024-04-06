@@ -72,7 +72,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	// append new entries not already in the log
-	rf.logs = append(rf.logs, args.LeaderLogEntries...)
+	rf.logs = append(rf.logs, args.LeaderLogEntries[args.LeaderPrevLogIndex+1:]...)
+	DPrint(rf.me, "AppendEntries RPC", "Called By %d; appended to logs %v", args.LeaderId, rf.logs)
 
 	// update commitIndex with highest known log entry
 	if args.LeaderCommitIndex > rf.commitIndex {
@@ -80,28 +81,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	DPrint(rf.me, "AppendEntries RPC", "Logs appended for %d; Heartbeat: false", args.LeaderId)
-}
-
-// apply()
-// applies command to state machine
-func (rf *Raft) apply() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
-	index := len(rf.logs) - 1
-	msg := ApplyMsg{
-		CommandValid: true,
-		Command:      rf.logs[index].Command,
-		CommandIndex: index,
-	}
-
-	if msg.CommandIndex <= rf.lastApplied {
-		return
-	}
-
-	rf.lastApplied = index
-
-	rf.applyCh <- msg
 }
 
 // sendAppendEntry method
@@ -114,9 +93,9 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		args := rf.makeAppendEntriesArgs(server)
 		reply := &AppendEntriesReply{}
 
-		DPrint(rf.me, "sendAppendEntry", "Initiating RPC for %d", server)
+		DPrint(rf.me, "sendAppendEntry", "Calling Raft.AppendEntries RPC for %d", server)
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-		DPrint(rf.me, "sendAppendEntry", "Completed RPC for %d", server)
+		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d", server)
 
 		if !ok {
 			DPrint(rf.me, "sendAppendEntry", "RPC Error for %d", server)
@@ -165,7 +144,7 @@ OuterLoop:
 		select {
 		case outcome := <-replicationChan:
 			replicationCount += outcome
-			if replicationsNeeded == replicationCount {
+			if replicationsNeeded >= replicationCount {
 				// TODO: not sure if correct; needs testing
 				rf.mu.Lock()
 				rf.commitIndex = max(rf.commitIndex, len(rf.logs))
@@ -182,6 +161,7 @@ OuterLoop:
 		}
 	}
 
+	DPrint(rf.me, "sendLogEntries", "finished; send to applyCh: %v", msg)
 	rf.applyCh <- msg
 }
 
@@ -192,13 +172,12 @@ func (rf *Raft) sendHeartbeat(server int) {
 	args.LeaderLogEntries = make([]LogEntry, 0)
 	reply := &AppendEntriesReply{}
 
-	DPrint(rf.me, "sendHearbeat", "sending to %d", server)
+	// DPrint(rf.me, "sendHearbeat", "sending to %d", server)
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	DPrint(rf.me, "sendHearbeat", "recieved from %d", server)
+	// DPrint(rf.me, "sendHearbeat", "recieved from %d", server)
 
 	// convert to follower
 	if ok && !reply.Success && reply.Term > args.LeaderTerm {
-		DPrint(rf.me, "sendHearbeat", "converted to follower")
 		rf.becomeFollower(reply.Term)
 	}
 }
@@ -206,7 +185,7 @@ func (rf *Raft) sendHeartbeat(server int) {
 // sendHeartbeats method
 // triggered by leader sending empty AppendEntries RPCs to followers
 func (rf *Raft) sendHeartbeats() {
-	DPrint(rf.me, "sendHearbeatS", "isLeader=%t", rf.getState() == Leader)
+	// DPrint(rf.me, "sendHearbeatS", "isLeader=%t", rf.getState() == Leader)
 	for serverId := range len(rf.peers) {
 		if serverId != rf.me {
 			go rf.sendHeartbeat(serverId)
