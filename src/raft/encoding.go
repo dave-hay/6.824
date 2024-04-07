@@ -8,44 +8,26 @@ import (
 	"log"
 )
 
-type Payload struct {
-	Payload []byte
+func encodeLogs(logs []LogEntry) []byte {
+	encodedLogs, err := encodePayload(logs)
+
+	if err != nil {
+		log.Printf("Failed to encode arguments: %v", err)
+	}
+
+	return encodedLogs
 }
 
-func endcodeParams(encodedArgs []byte, encodedReply []byte) (*AppendEntriesArgs, *AppendEntriesReply) {
-
-	decodedReply := &AppendEntriesReply{}
-	decodedArgs := &AppendEntriesArgs{}
+func decodeLogs(encodedLogs []byte) *[]LogEntry {
+	decodedLogs := &[]LogEntry{}
 
 	// Decode the reply
-	err := decodePayload(encodedReply, decodedReply)
+	err := decodePayload(encodedLogs, decodedLogs)
 	if err != nil {
 		log.Printf("Failed to decode reply: %v", err)
 	}
 
-	err = decodePayload(encodedArgs, decodedArgs)
-
-	if err != nil {
-		log.Printf("Failed to decode reply: %v", err)
-	}
-
-	return decodedArgs, decodedReply
-}
-
-func decodeParams(args interface{}, reply interface{}) ([]byte, []byte) {
-	encodedArgs, err := encodePayload(args)
-
-	if err != nil {
-		log.Printf("Failed to encode arguments: %v", err)
-	}
-
-	encodedReply, err := encodePayload(reply)
-
-	if err != nil {
-		log.Printf("Failed to encode arguments: %v", err)
-	}
-
-	return encodedArgs, encodedReply
+	return decodedLogs
 }
 
 func encodePayload(data interface{}) ([]byte, error) {
@@ -98,4 +80,40 @@ func decodePayload(compressedPayload []byte, data interface{}) error {
 	}
 
 	return nil
+}
+
+func decodeParams(encodedArgs []byte, encodedReply []byte) (*AppendEntriesArgs, *AppendEntriesReply) {
+
+	decodedReply := &AppendEntriesReply{}
+	decodedArgs := &AppendEntriesArgs{}
+
+	// Decode the reply
+	err := decodePayload(encodedReply, decodedReply)
+	if err != nil {
+		log.Printf("Failed to decode reply: %v", err)
+	}
+
+	err = decodePayload(encodedArgs, decodedArgs)
+
+	if err != nil {
+		log.Printf("Failed to decode reply: %v", err)
+	}
+
+	return decodedArgs, decodedReply
+}
+
+func encodeParams(args interface{}, reply interface{}) ([]byte, []byte) {
+	encodedArgs, err := encodePayload(args)
+
+	if err != nil {
+		log.Printf("Failed to encode arguments: %v", err)
+	}
+
+	encodedReply, err := encodePayload(reply)
+
+	if err != nil {
+		log.Printf("Failed to encode arguments: %v", err)
+	}
+
+	return encodedArgs, encodedReply
 }
