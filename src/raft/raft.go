@@ -77,7 +77,7 @@ type Raft struct {
 	state               State
 	applyCh             chan ApplyMsg
 	lastHeardFromLeader time.Time
-	logCh               chan LogEntry
+	logQueue            LogQueue
 
 	// leader only, volatile state
 	// contains information about follower servers
@@ -174,9 +174,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		applyCh:     applyCh,
 	}
 	rf.logs = append(rf.logs, LogEntry{Term: 0})
+	rf.logQueue.cond = sync.NewCond(&sync.Mutex{})
 
 	// Your initialization code here (2A, 2B, 2C).
 	go rf.mainLoop()
+	go rf.logQueueConsumer()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())

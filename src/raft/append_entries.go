@@ -39,7 +39,10 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	DPrint(rf.me, "AppendEntries RPC", "Called By %d; Heartbeat: %t; LeaderTerm: %d; CurrentTerm: %d", args.LeaderId, len(args.LeaderLogEntries) == 0, args.LeaderTerm, rf.currentTerm)
+
+	if len(args.LeaderLogEntries) != 0 {
+		DPrint(rf.me, "AppendEntries RPC", "Called By %d; LeaderTerm: %d; CurrentTerm: %d", args.LeaderId, args.LeaderTerm, rf.currentTerm)
+	}
 
 	// let leader know it is behind if their term < instances
 	if args.LeaderTerm < rf.currentTerm {
@@ -56,12 +59,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.currentTerm = args.LeaderTerm
 	reply.Success = true
 
-	// if heartbeat; update commitIndex and return
-	if len(args.LeaderLogEntries) == 0 {
-		rf.commitIndex = max(rf.commitIndex, args.LeaderCommitIndex)
-		return
-	}
-
 	// If leader's prevLogTerm != follower's prevLogTerm:
 	// reply false and delete all existing entries from prevLogIndex forward
 	if args.LeaderPrevLogIndex <= len(rf.logs)-1 &&
@@ -71,16 +68,20 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
+	// if heartbeat; update commitIndex and return
+	if len(args.LeaderLogEntries) != 0 {
+		// send to consumer
+		toAppend := args.LeaderLogEntries[args.LeaderPrevLogIndex+1:]
+		DPrint(rf.me, "AppendEntries RPC", "Called By %d; appending %v to logs %v", args.LeaderId, toAppend, rf.logs)
+		rf.logs = append(rf.logs, toAppend...)
+		go rf.logQueueProducer(len(rf.logs) - 1)
+	}
 	// append new entries not already in the log
-	rf.logs = append(rf.logs, args.LeaderLogEntries[args.LeaderPrevLogIndex+1:]...)
-	DPrint(rf.me, "AppendEntries RPC", "Called By %d; appended to logs %v", args.LeaderId, rf.logs)
 
 	// update commitIndex with highest known log entry
 	if args.LeaderCommitIndex > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommitIndex, len(rf.logs)-1)
 	}
-
-	DPrint(rf.me, "AppendEntries RPC", "Logs appended for %d; Heartbeat: false", args.LeaderId)
 }
 
 // sendAppendEntry method
@@ -89,13 +90,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
 	DPrint(rf.me, "sendAppendEntry", "called for server %d", server)
 
-	for !rf.killed() {
-		args := rf.makeAppendEntriesArgs(server)
-		reply := &AppendEntriesReply{}
+	args := rf.makeAppendEntriesArgs(server)
+	reply := &AppendEntriesReply{}
 
-		DPrint(rf.me, "sendAppendEntry", "Calling Raft.AppendEntries RPC for %d", server)
+	for !rf.killed() {
+		DPrint(rf.me, "sendAppendEntry", "Calling Raft.AppendEntries RPC for %d; args: %v", server, args)
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d", server)
+		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
 
 		if !ok {
 			DPrint(rf.me, "sendAppendEntry", "RPC Error for %d", server)
@@ -126,7 +127,6 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 // sendLogEntries
 func (rf *Raft) sendLogEntries() {
 	DPrint(rf.me, "sendLogEntries", "called")
-	var msg ApplyMsg
 	peerCount := len(rf.peers)
 	replicationCount := 0
 	replicationsNeeded := (peerCount / 2)
@@ -140,7 +140,6 @@ func (rf *Raft) sendLogEntries() {
 	}
 
 	// determine quorum of logs sent to finalize commit
-OuterLoop:
 	for range peerCount - 1 {
 		select {
 		case outcome := <-replicationChan:
@@ -148,22 +147,15 @@ OuterLoop:
 			if replicationsNeeded >= replicationCount {
 				// TODO: not sure if correct; needs testing
 				rf.mu.Lock()
-				rf.commitIndex = max(rf.commitIndex, len(rf.logs))
-				msg = ApplyMsg{
-					CommandValid: true,
-					Command:      rf.logs[len(rf.logs)-1].Command,
-					CommandIndex: len(rf.logs) - 1,
-				}
+				rf.commitIndex = max(rf.commitIndex, len(rf.logs)-1)
 				rf.mu.Unlock()
-				break OuterLoop
+				go rf.logQueueProducer(len(rf.logs) - 1)
+				return
 			}
 		case <-isFollower:
-			break OuterLoop
+			return
 		}
 	}
-
-	DPrint(rf.me, "sendLogEntries", "finished; send to applyCh: %v", msg)
-	rf.applyCh <- msg
 }
 
 // sendHeartbeat method: sends single heartbeat

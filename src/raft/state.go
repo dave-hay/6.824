@@ -28,29 +28,36 @@ func (rf *Raft) logQueueProducer(index int) {
 		rf.logQueue.indexes,
 		index,
 	)
+	rf.logQueue.cond.Signal()
+	DPrint(rf.me, "logQueueProducer()", "appended commit at index: %v; indexes: %v", index, rf.logQueue.indexes)
 }
 
 //lint:ignore U1000 Ignore unused function temporarily for debugging
 func (rf *Raft) logQueueConsumer() {
-	rf.logQueue.cond.L.Lock()
-	defer rf.logQueue.cond.L.Unlock()
-	for len(rf.logQueue.indexes) == 0 {
-		rf.logQueue.cond.Wait()
+	for !rf.killed() {
+		rf.logQueue.cond.L.Lock()
+		for len(rf.logQueue.indexes) == 0 {
+			rf.logQueue.cond.Wait()
+		}
+
+		index := rf.logQueue.indexes[0]
+		rf.logQueue.indexes = rf.logQueue.indexes[1:]
+
+		rf.logQueue.cond.L.Unlock()
+
+		rf.mu.Lock()
+		msg := ApplyMsg{
+			CommandValid: true,
+			Command:      rf.logs[index].Command,
+			CommandIndex: index,
+		}
+		rf.lastApplied = index
+		rf.mu.Unlock()
+
+		DPrint(rf.me, "logQueueConsumer()", "processing commit at index: %v; ApplyMsg: %v", index, msg)
+
+		rf.applyCh <- msg
 	}
-
-	index := rf.logQueue.indexes[0]
-	rf.logQueue.indexes = rf.logQueue.indexes[1:]
-	DPrint(rf.me, "logQueueConsumer()", "processing: %v", index)
-
-	msg := ApplyMsg{
-		CommandValid: true,
-		Command:      rf.logs[index].Command,
-		CommandIndex: index,
-	}
-
-	rf.lastApplied = index
-
-	rf.applyCh <- msg
 }
 
 // Start()
@@ -63,21 +70,21 @@ func (rf *Raft) logQueueConsumer() {
 // term (int): current term
 // isLeader (bool): if server is leader
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	DPrint(rf.me, "Start()", "command: %v", command)
 	index := -1
 	term := -1
 	isLeader := false
 
 	if rf.getState() != Leader {
+		DPrint(rf.me, "Start()", "rejected is not leader")
 		return index, term, isLeader
 	}
 
 	rf.mu.Lock()
 	term = rf.currentTerm
 	isLeader = rf.state == Leader
+	index = len(rf.logs)
 	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
-	index = len(rf.logs) - 1
-
+	DPrint(rf.me, "Start()", "command: %v appended to log; index: %d; logs: %v", command, index, rf.logs)
 	rf.mu.Unlock()
 
 	// fire off AppendEntries
