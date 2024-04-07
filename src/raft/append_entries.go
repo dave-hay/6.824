@@ -104,6 +104,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 
 		if reply.Success {
 			DPrint(rf.me, "sendAppendEntry", "RPC success for %d", server)
+			rf.nextIndex[server]++
 			replicationChan <- 1
 			return
 		}
