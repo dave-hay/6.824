@@ -4,17 +4,14 @@ import (
 	"sync"
 )
 
-// for adding commands from start
+// keeps order of applied logs
 type LogQueue struct {
-	//lint:ignore U1000 Ignore unused function temporarily for debugging
 	indexes []int // where logs applied
 	cond    *sync.Cond
 }
 
 // logQueueProducer
 // when applying new entries
-//
-//lint:ignore U1000 Ignore unused function temporarily for debugging
 func (rf *Raft) logQueueProducer(index int) {
 	rf.logQueue.cond.L.Lock()
 	defer rf.logQueue.cond.L.Unlock()
@@ -32,7 +29,8 @@ func (rf *Raft) logQueueProducer(index int) {
 	DPrint(rf.me, "logQueueProducer()", "appended commit at index: %v; indexes: %v", index, rf.logQueue.indexes)
 }
 
-//lint:ignore U1000 Ignore unused function temporarily for debugging
+// logQueueConsumer
+// creates + sends ApplyMsg to applyCh
 func (rf *Raft) logQueueConsumer() {
 	for !rf.killed() {
 		rf.logQueue.cond.L.Lock()
@@ -54,7 +52,7 @@ func (rf *Raft) logQueueConsumer() {
 		rf.lastApplied = index
 		rf.mu.Unlock()
 
-		DPrint(rf.me, "logQueueConsumer()", "processing commit at index: %v; ApplyMsg: %v", index, msg)
+		DPrint(rf.me, "logQueueConsumer()", "sending ApplyMsg to applyCh")
 
 		rf.applyCh <- msg
 	}
@@ -75,7 +73,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := false
 
 	if rf.getState() != Leader {
-		DPrint(rf.me, "Start()", "rejected is not leader")
+		// DPrint(rf.me, "Start()", "rejected is not leader")
 		return index, term, isLeader
 	}
 
@@ -84,7 +82,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader = rf.state == Leader
 	index = len(rf.logs)
 	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
-	DPrint(rf.me, "Start()", "command: %v appended to log; index: %d; logs: %v", command, index, rf.logs)
+	// DPrint(rf.me, "Start()", "command: %v appended to log; index: %d; logs: %v", command, index, rf.logs)
 	rf.mu.Unlock()
 
 	// fire off AppendEntries
