@@ -18,11 +18,11 @@ func encodeLogs(logs []LogEntry) []byte {
 	return encodedLogs
 }
 
-func decodeLogs(encodedLogs []byte) *[]LogEntry {
-	decodedLogs := &[]LogEntry{}
+func decodeLogs(encodedLogs []byte) []LogEntry {
+	decodedLogs := []LogEntry{}
 
 	// Decode the reply
-	err := decodePayload(encodedLogs, decodedLogs)
+	err := decodePayload(encodedLogs, &decodedLogs)
 	if err != nil {
 		log.Printf("Failed to decode reply: %v", err)
 	}
