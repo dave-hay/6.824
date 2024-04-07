@@ -7,7 +7,7 @@ type AppendEntriesArgs struct {
 	LeaderId           int
 	LeaderPrevLogIndex int // nextIndex[followerId]
 	LeaderPrevLogTerm  int
-	LeaderLogEntries   []LogEntry
+	LeaderLogEntries   []byte
 	LeaderCommitIndex  int
 }
 
@@ -18,18 +18,23 @@ type AppendEntriesReply struct {
 
 // makeAppendEntriesArgs
 // uses nextIndex[server] - 1 for prev log index && term
+// doesn't send over all logs just onest that need to be added to save space
 func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	nextIndex := rf.nextIndex[server]
+
 	args := &AppendEntriesArgs{
 		LeaderTerm:        rf.currentTerm,
 		LeaderId:          rf.me,
 		LeaderCommitIndex: rf.commitIndex,
 		// below only necessary for appending logs
-		LeaderPrevLogIndex: rf.nextIndex[server] - 1,
-		LeaderPrevLogTerm:  rf.logs[rf.nextIndex[server]-1].Term,
-		LeaderLogEntries:   rf.logs,
+		LeaderPrevLogIndex: nextIndex - 1,
+		LeaderPrevLogTerm:  rf.logs[nextIndex-1].Term,
 	}
+
+	args.LeaderLogEntries = Compress(EncodeToBytes(make([]LogEntry, 0)))
 	return args
 }
 
@@ -39,8 +44,10 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	logBytes := Decompress(args.LeaderLogEntries)
+	logs := DecodeToLogs(logBytes)
 
-	if len(args.LeaderLogEntries) != 0 {
+	if len(logs) != 0 {
 		DPrint(rf.me, "AppendEntries RPC", "Called By %d; LeaderTerm: %d; CurrentTerm: %d", args.LeaderId, args.LeaderTerm, rf.currentTerm)
 	}
 
@@ -69,11 +76,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	// if heartbeat; update commitIndex and return
-	if len(args.LeaderLogEntries) != 0 {
+	if len(logs) != 0 {
 		// send to consumer
-		toAppend := args.LeaderLogEntries[args.LeaderPrevLogIndex+1:]
-		DPrint(rf.me, "AppendEntries RPC", "Called By %d; appending %v to logs %v", args.LeaderId, toAppend, rf.logs)
-		rf.logs = append(rf.logs, toAppend...)
+		DPrint(rf.me, "AppendEntries RPC", "Called By %d; appending to logs", args.LeaderId)
+		rf.logs = append(rf.logs, logs...)
 		go rf.logQueueProducer(len(rf.logs) - 1)
 	}
 	// append new entries not already in the log
@@ -91,12 +97,13 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 	DPrint(rf.me, "sendAppendEntry", "called for server %d", server)
 
 	args := rf.makeAppendEntriesArgs(server)
+	args.LeaderLogEntries = Compress(EncodeToBytes(rf.logs[args.LeaderPrevLogIndex+1:]))
 	reply := &AppendEntriesReply{}
 
 	for !rf.killed() {
-		DPrint(rf.me, "sendAppendEntry", "Calling Raft.AppendEntries RPC for %d; args: %v", server, args)
+		// DPrint(rf.me, "sendAppendEntry", "Calling Raft.AppendEntries RPC for %d; args: %v", server, args)
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
+		// DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
 
 		if !ok {
 			DPrint(rf.me, "sendAppendEntry", "RPC Error for %d", server)
@@ -162,7 +169,6 @@ func (rf *Raft) sendLogEntries() {
 // server (int) defines serverId RPC is for
 func (rf *Raft) sendHeartbeat(server int) {
 	args := rf.makeAppendEntriesArgs(server)
-	args.LeaderLogEntries = make([]LogEntry, 0)
 	reply := &AppendEntriesReply{}
 
 	// DPrint(rf.me, "sendHearbeat", "sending to %d", server)
