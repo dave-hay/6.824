@@ -48,7 +48,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	logs := DecodeToLogs(logBytes)
 
 	if len(logs) != 0 {
-		DPrint(rf.me, "AppendEntries RPC", "Called By %d; LeaderTerm: %d; CurrentTerm: %d", args.LeaderId, args.LeaderTerm, rf.currentTerm)
+		DPrint(rf.me, "AppendEntries RPC", "Called By %d", args.LeaderId)
 	}
 
 	// let leader know it is behind if their term < instances
@@ -66,10 +66,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.currentTerm = args.LeaderTerm
 	reply.Success = true
 
-	DPrint(rf.me, "AppendEntries RPC", "Leader %d: prevLogIndex: %d; cur prevLogIndex: %d", args.LeaderId, args.LeaderPrevLogIndex, len(rf.logs)-1)
-
 	// decrement nextIndex
 	if args.LeaderPrevLogIndex > len(rf.logs)-1 {
+		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > len(rf.logs) -1 (%d); LeaderID: %d;", args.LeaderPrevLogIndex, len(rf.logs)-1, args.LeaderId)
 		reply.Success = false
 		return
 	}
@@ -78,6 +77,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// reply false and delete all existing entries from prevLogIndex forward
 	if args.LeaderPrevLogIndex <= len(rf.logs)-1 &&
 		args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex].Term {
+		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; args.LeaderPrevLogTerm (%d) != rf.logs[args.LeaderPrevLogIndex].Term (%d); LeaderID: %d;", args.LeaderPrevLogIndex, args.LeaderPrevLogTerm, rf.logs[args.LeaderPrevLogIndex].Term)
 		rf.logs = rf.logs[:args.LeaderPrevLogIndex]
 		reply.Success = false
 		return
@@ -149,12 +149,13 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 
 // sendLogEntries
 func (rf *Raft) sendLogEntries() {
-	DPrint(rf.me, "sendLogEntries", "called")
 	peerCount := len(rf.peers)
 	replicationCount := 0
 	replicationsNeeded := (peerCount / 2)
 	replicationChan := make(chan int, peerCount-1)
 	isFollower := make(chan bool, peerCount-1)
+
+	DPrint(rf.me, "sendLogEntries", "called; replicationsNeeded: %d; peers: %v", replicationsNeeded, rf.peers)
 
 	for serverId := range peerCount {
 		if serverId != rf.me {
@@ -167,8 +168,9 @@ func (rf *Raft) sendLogEntries() {
 		select {
 		case outcome := <-replicationChan:
 			replicationCount += outcome
-			if replicationsNeeded >= replicationCount {
-				// TODO: not sure if correct; needs testing
+			DPrint(rf.me, "sendLogEntries", "replicaitonCount: %d; outcome: %d; replicationsNeeded: %d", replicationCount, outcome, replicationsNeeded)
+			if replicationCount >= replicationsNeeded {
+				DPrint(rf.me, "sendLogEntries", "replicationsNeeded >= replicaitonCount == %d >= %d;", replicationsNeeded, replicationCount)
 				rf.mu.Lock()
 				rf.commitIndex++
 				rf.mu.Unlock()
