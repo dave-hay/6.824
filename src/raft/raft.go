@@ -183,7 +183,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		lastApplied: 0,
 		applyCh:     applyCh,
 	}
-	rf.logs = append(rf.logs, LogEntry{Term: 0})
 	rf.logQueue.cond = sync.NewCond(&sync.Mutex{})
 
 	// Your initialization code here (2A, 2B, 2C).
