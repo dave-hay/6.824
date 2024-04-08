@@ -66,6 +66,14 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.currentTerm = args.LeaderTerm
 	reply.Success = true
 
+	DPrint(rf.me, "AppendEntries RPC", "Leader %d: prevLogIndex: %d; cur prevLogIndex: %d", args.LeaderId, args.LeaderPrevLogIndex, len(rf.logs)-1)
+
+	// decrement nextIndex
+	if args.LeaderPrevLogIndex > len(rf.logs)-1 {
+		reply.Success = false
+		return
+	}
+
 	// If leader's prevLogTerm != follower's prevLogTerm:
 	// reply false and delete all existing entries from prevLogIndex forward
 	if args.LeaderPrevLogIndex <= len(rf.logs)-1 &&
