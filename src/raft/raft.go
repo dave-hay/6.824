@@ -81,8 +81,17 @@ type Raft struct {
 
 	// leader only, volatile state
 	// contains information about follower servers
-	nextIndex  []int // index of next log entry on server i; init to len(rf.logs) + 1
-	matchIndex []int // index of highest log entry known to be replicated on server; init to -1
+
+	// nextIndex is a guess as to what prefix the leader shares with a given follower.
+	// Generally quite optimistic (we share everything), and is moved backwards only on negative responses.
+	// index of next log entry on server i; init to len(rf.logs) + 1
+	// Instead, the correct thing to do is update matchIndex to be prevLogIndex + len(entries[]) from the arguments you sent in the RPC originally.
+	nextIndex []int
+
+	// index of highest log entry known to be replicated on server; init to -1
+	// It is a conservative measurement of what prefix of the log the leader shares with a given follower
+	// matchIndex cannot ever be set to a value that is too high, as this may cause the commitIndex to be moved too far forward.
+	matchIndex []int
 }
 
 // return currentTerm and whether this server
