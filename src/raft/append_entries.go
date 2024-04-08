@@ -83,14 +83,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	// if heartbeat; update commitIndex and return
+	// append new entries not already in the log
+	// send to consumer
 	if len(logs) != 0 {
-		// send to consumer
 		DPrint(rf.me, "AppendEntries RPC", "Called By %d; appending to logs", args.LeaderId)
 		rf.logs = append(rf.logs, logs...)
 		go rf.logQueueProducer(len(rf.logs) - 1)
 	}
-	// append new entries not already in the log
 
 	// update commitIndex with highest known log entry
 	if args.LeaderCommitIndex > rf.commitIndex {
@@ -120,7 +119,11 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 
 		if reply.Success {
 			DPrint(rf.me, "sendAppendEntry", "RPC success for %d", server)
+			// Instead, the correct thing to do is update matchIndex to be prevLogIndex + len(entries[]) from the arguments you sent in the RPC originally.
+			rf.mu.Lock()
+			rf.matchIndex[server] = args.LeaderPrevLogIndex + len(args.LeaderLogEntries)
 			rf.nextIndex[server]++
+			rf.mu.Unlock()
 			replicationChan <- 1
 			return
 		}
