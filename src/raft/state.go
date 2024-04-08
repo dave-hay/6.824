@@ -6,8 +6,9 @@ import (
 
 // keeps order of applied logs
 type LogQueue struct {
-	indexes []int // where logs applied
-	cond    *sync.Cond
+	prevIndex int
+	indexes   []int // where logs applied
+	cond      *sync.Cond
 }
 
 // logQueueProducer
@@ -16,15 +17,20 @@ func (rf *Raft) logQueueProducer(index int) {
 	rf.logQueue.cond.L.Lock()
 	defer rf.logQueue.cond.L.Unlock()
 
-	// nextIndex i.e. where it should be applied
-	// if nextIndex <= rf.lastApplied {
-	// 	return
-	// }
+	rf.mu.Lock()
+	prevIndex := rf.logQueue.prevIndex
+	rf.mu.Unlock()
 
-	rf.logQueue.indexes = append(
-		rf.logQueue.indexes,
-		index,
-	)
+	for i := prevIndex + 1; i <= index; i++ {
+		rf.logQueue.indexes = append(
+			rf.logQueue.indexes,
+			i,
+		)
+		rf.mu.Lock()
+		prevIndex = i
+		rf.mu.Unlock()
+	}
+
 	rf.logQueue.cond.Signal()
 	DPrint(rf.me, "logQueueProducer()", "appended commit at index: %v; indexes: %v", index, rf.logQueue.indexes)
 }

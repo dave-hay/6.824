@@ -133,7 +133,15 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			return
 		}
 
+		rf.mu.Lock()
 		rf.nextIndex[server]--
+		nextIndex := rf.nextIndex[server]
+		rf.mu.Unlock()
+
+		args.LeaderPrevLogIndex = nextIndex - 1
+		args.LeaderPrevLogTerm = rf.logs[nextIndex-1].Term
+		args.LeaderLogEntries = Compress(EncodeToBytes(rf.logs[nextIndex:]))
+
 		DPrint(rf.me, "sendAppendEntry", "Repeating request %d", server)
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -162,7 +170,7 @@ func (rf *Raft) sendLogEntries() {
 			if replicationsNeeded >= replicationCount {
 				// TODO: not sure if correct; needs testing
 				rf.mu.Lock()
-				rf.commitIndex = max(rf.commitIndex, len(rf.logs)-1)
+				rf.commitIndex++
 				rf.mu.Unlock()
 				go rf.logQueueProducer(len(rf.logs) - 1)
 				return
