@@ -6,9 +6,8 @@ import (
 
 // keeps order of applied logs
 type LogQueue struct {
-	prevIndex int
-	indexes   []int // where logs applied
-	cond      *sync.Cond
+	indexes []int // where logs applied
+	cond    *sync.Cond
 }
 
 // logQueueProducer
@@ -18,7 +17,7 @@ func (rf *Raft) logQueueProducer(index int) {
 	defer rf.logQueue.cond.L.Unlock()
 
 	rf.mu.Lock()
-	prevIndex := rf.logQueue.prevIndex
+	prevIndex := rf.lastApplied
 	rf.mu.Unlock()
 
 	for i := prevIndex + 1; i <= index; i++ {
@@ -26,9 +25,6 @@ func (rf *Raft) logQueueProducer(index int) {
 			rf.logQueue.indexes,
 			i,
 		)
-		rf.mu.Lock()
-		prevIndex = i
-		rf.mu.Unlock()
 	}
 
 	rf.logQueue.cond.Signal()
