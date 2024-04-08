@@ -48,7 +48,7 @@ func (rf *Raft) logQueueConsumer() {
 		rf.mu.Lock()
 		msg := ApplyMsg{
 			CommandValid: true,
-			Command:      rf.logs[index].Command,
+			Command:      rf.logs[index-1].Command,
 			CommandIndex: index,
 		}
 		rf.lastApplied = index
@@ -82,7 +82,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	term = rf.currentTerm
 	isLeader = rf.state == Leader
-	index = len(rf.logs)
+	index = len(rf.logs) + 1
 	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
 	// DPrint(rf.me, "Start()", "command: %v appended to log; index: %d; logs: %v", command, index, rf.logs)
 	rf.mu.Unlock()

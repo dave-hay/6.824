@@ -32,7 +32,6 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 	}
 
 	serverPrevLogIndex := rf.nextIndex[server] - 1
-	DPrint(rf.me, "makeAppendEntriesArgs()", "server: %d; serverPrevLogIndex: %d", server, serverPrevLogIndex)
 
 	if serverPrevLogIndex != 0 {
 		args.LeaderPrevLogIndex = serverPrevLogIndex
@@ -40,8 +39,6 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 	}
 
 	args.LeaderLogEntries = Compress(EncodeToBytes(make([]LogEntry, 0)))
-
-	DPrint(rf.me, "makeAppendEntriesArgs()", "server: %d; args: %v", server, args)
 
 	return args
 }
@@ -56,7 +53,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	logs := DecodeToLogs(logBytes)
 
 	if len(logs) != 0 {
-		DPrint(rf.me, "AppendEntries RPC", "Called By %d", args.LeaderId)
+		DPrint(rf.me, "AppendEntries RPC", "Called By %d; logs: %v", args.LeaderId, logs)
 	}
 
 	// let leader know it is behind if their term < instances
@@ -75,8 +72,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	reply.Success = true
 
 	// decrement nextIndex
-	if args.LeaderPrevLogIndex > len(rf.logs) {
-		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > len(rf.logs) -1 (%d); LeaderID: %d;", args.LeaderPrevLogIndex, len(rf.logs)-1, args.LeaderId)
+	if len(rf.logs) != 0 && args.LeaderPrevLogIndex > len(rf.logs) {
+		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > len(rf.logs) (%d); LeaderID: %d;", args.LeaderPrevLogIndex, len(rf.logs), args.LeaderId)
 		reply.Success = false
 		return
 	}
@@ -94,8 +91,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// append new entries not already in the log
 	// send to consumer
 	if len(logs) != 0 {
-		DPrint(rf.me, "AppendEntries RPC", "Called By %d; appending to logs", args.LeaderId)
 		rf.logs = append(rf.logs, logs...)
+		DPrint(rf.me, "AppendEntries RPC", "Called By %d; appending to %v logs; %v", args.LeaderId, logs, rf.logs)
 		go rf.logQueueProducer(len(rf.logs))
 	}
 
@@ -109,16 +106,18 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
-	DPrint(rf.me, "sendAppendEntry", "called for server %d", server)
 
 	args := rf.makeAppendEntriesArgs(server)
-	args.LeaderLogEntries = Compress(EncodeToBytes(rf.logs[args.LeaderPrevLogIndex+1:]))
+	arr := rf.logs[args.LeaderPrevLogIndex:]
+
+	args.LeaderLogEntries = Compress(EncodeToBytes(arr))
+	DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
 	reply := &AppendEntriesReply{}
 
 	for !rf.killed() {
-		// DPrint(rf.me, "sendAppendEntry", "Calling Raft.AppendEntries RPC for %d; args: %v", server, args)
+		DPrint(rf.me, "sendAppendEntry", "Calling Raft.AppendEntries RPC for %d", server)
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-		// DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
+		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
 
 		if !ok {
 			DPrint(rf.me, "sendAppendEntry", "RPC Error for %d", server)
@@ -151,7 +150,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 
 		args.LeaderPrevLogIndex = nextIndex - 1
 		args.LeaderPrevLogTerm = rf.logs[nextIndex-1].Term
-		args.LeaderLogEntries = Compress(EncodeToBytes(rf.logs[nextIndex:]))
+		args.LeaderLogEntries = Compress(EncodeToBytes(rf.logs[nextIndex-1 : rf.commitIndex]))
 
 		DPrint(rf.me, "sendAppendEntry", "Repeating request %d", server)
 		time.Sleep(10 * time.Millisecond)
@@ -185,7 +184,7 @@ func (rf *Raft) sendLogEntries() {
 				rf.mu.Lock()
 				rf.commitIndex++
 				rf.mu.Unlock()
-				go rf.logQueueProducer(len(rf.logs) - 1)
+				go rf.logQueueProducer(len(rf.logs))
 				return
 			}
 		case <-isFollower:
