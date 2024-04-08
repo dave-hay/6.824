@@ -152,13 +152,16 @@ func (rf *Raft) becomeLeader() {
 
 	peerCount := len(rf.peers)
 	newNextIndex := make([]int, peerCount)
+	newMatchIndex := make([]int, peerCount)
 
 	for i := range peerCount {
 		newNextIndex[i] = val
+		newMatchIndex[i] = -1
 	}
 
 	rf.mu.Lock()
 	rf.nextIndex = newNextIndex
+	rf.matchIndex = newMatchIndex
 	rf.mu.Unlock()
 }
 

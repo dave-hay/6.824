@@ -81,7 +81,8 @@ type Raft struct {
 
 	// leader only, volatile state
 	// contains information about follower servers
-	nextIndex []int // index of next log entry on server i; init to len(rf.logs) + 1
+	nextIndex  []int // index of next log entry on server i; init to len(rf.logs) + 1
+	matchIndex []int // index of highest log entry known to be replicated on server; init to -1
 }
 
 // return currentTerm and whether this server
