@@ -22,19 +22,27 @@ type AppendEntriesReply struct {
 func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-
-	nextIndex := rf.nextIndex[server]
-
 	args := &AppendEntriesArgs{
 		LeaderTerm:        rf.currentTerm,
 		LeaderId:          rf.me,
 		LeaderCommitIndex: rf.commitIndex,
 		// below only necessary for appending logs
-		LeaderPrevLogIndex: nextIndex - 1,
-		LeaderPrevLogTerm:  rf.logs[nextIndex-1].Term,
+		LeaderPrevLogIndex: 0,
+		LeaderPrevLogTerm:  0,
+	}
+
+	serverPrevLogIndex := rf.nextIndex[server] - 1
+	DPrint(rf.me, "makeAppendEntriesArgs()", "server: %d; serverPrevLogIndex: %d", server, serverPrevLogIndex)
+
+	if serverPrevLogIndex != 0 {
+		args.LeaderPrevLogIndex = serverPrevLogIndex
+		args.LeaderPrevLogTerm = rf.logs[serverPrevLogIndex-1].Term
 	}
 
 	args.LeaderLogEntries = Compress(EncodeToBytes(make([]LogEntry, 0)))
+
+	DPrint(rf.me, "makeAppendEntriesArgs()", "server: %d; args: %v", server, args)
+
 	return args
 }
 
@@ -67,7 +75,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	reply.Success = true
 
 	// decrement nextIndex
-	if args.LeaderPrevLogIndex > len(rf.logs)-1 {
+	if args.LeaderPrevLogIndex > len(rf.logs) {
 		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > len(rf.logs) -1 (%d); LeaderID: %d;", args.LeaderPrevLogIndex, len(rf.logs)-1, args.LeaderId)
 		reply.Success = false
 		return
@@ -75,10 +83,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// If leader's prevLogTerm != follower's prevLogTerm:
 	// reply false and delete all existing entries from prevLogIndex forward
-	if args.LeaderPrevLogIndex <= len(rf.logs)-1 &&
-		args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex].Term {
+	if args.LeaderPrevLogIndex != 0 && args.LeaderPrevLogIndex <= len(rf.logs) &&
+		args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex-1].Term {
 		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; args.LeaderPrevLogTerm (%d) != rf.logs[args.LeaderPrevLogIndex].Term (%d); LeaderID: %d;", args.LeaderPrevLogIndex, args.LeaderPrevLogTerm, rf.logs[args.LeaderPrevLogIndex].Term)
-		rf.logs = rf.logs[:args.LeaderPrevLogIndex]
+		rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
 		reply.Success = false
 		return
 	}
@@ -88,12 +96,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if len(logs) != 0 {
 		DPrint(rf.me, "AppendEntries RPC", "Called By %d; appending to logs", args.LeaderId)
 		rf.logs = append(rf.logs, logs...)
-		go rf.logQueueProducer(len(rf.logs) - 1)
+		go rf.logQueueProducer(len(rf.logs))
 	}
 
 	// update commitIndex with highest known log entry
 	if args.LeaderCommitIndex > rf.commitIndex {
-		rf.commitIndex = min(args.LeaderCommitIndex, len(rf.logs)-1)
+		rf.commitIndex = min(args.LeaderCommitIndex, len(rf.logs))
 	}
 }
 

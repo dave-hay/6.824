@@ -25,7 +25,7 @@ func (rf *Raft) makeRequestVoteArgs() *RequestVoteArgs {
 	}
 
 	if len(rf.logs) != 0 {
-		args.CandidateLastLogIndex = len(rf.logs) - 1
+		args.CandidateLastLogIndex = len(rf.logs)
 		args.CandidateLastLogTerm = rf.logs[len(rf.logs)-1].Term
 	}
 
@@ -51,7 +51,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	isVoterValid := rf.votedFor == -1 || rf.votedFor == args.CandidateId
 	// candidates log is at least as up to date as voters log
-	isCandidateValid := args.CandidateLastLogIndex >= len(rf.logs)-1
+	isCandidateValid := args.CandidateLastLogIndex >= len(rf.logs)
 
 	if isVoterValid && isCandidateValid {
 		DPrintf("raft %d; RequestVote; voted for candidate %d", rf.me, args.CandidateId)
@@ -66,15 +66,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // sendRequestVote method
 // called by candidates during election to request a vote from a Raft instance
 func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChannel chan bool) {
-	rf.mu.Lock()
-	args := &RequestVoteArgs{
-		CandidateId:           rf.me,
-		CandidateTerm:         rf.currentTerm,
-		CandidateLastLogIndex: len(rf.logs) - 1,
-		CandidateLastLogTerm:  rf.logs[len(rf.logs)-1].Term,
-	}
+	args := rf.makeRequestVoteArgs()
 	reply := &RequestVoteReply{}
-	rf.mu.Unlock()
 
 	DPrintf("raft %d; sendRequestVote; sending to %d", rf.me, server)
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
@@ -165,7 +158,7 @@ func (rf *Raft) becomeLeader() {
 	DPrint(rf.me, "becomeLeader", "is now leader")
 	rf.mu.Lock()
 	rf.state = Leader
-	val := len(rf.logs) // last log index + 1
+	val := len(rf.logs) + 1 // last log index + 1
 	rf.mu.Unlock()
 
 	peerCount := len(rf.peers)
