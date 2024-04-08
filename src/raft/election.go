@@ -14,6 +14,24 @@ type RequestVoteReply struct {
 	VoteGranted bool
 }
 
+func (rf *Raft) makeRequestVoteArgs() *RequestVoteArgs {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	args := &RequestVoteArgs{
+		CandidateId:           rf.me,
+		CandidateTerm:         rf.currentTerm,
+		CandidateLastLogIndex: 0,
+		CandidateLastLogTerm:  0,
+	}
+
+	if len(rf.logs) != 0 {
+		args.CandidateLastLogIndex = len(rf.logs) - 1
+		args.CandidateLastLogTerm = rf.logs[len(rf.logs)-1].Term
+	}
+
+	return args
+}
+
 // RequestVote RPC
 // called by voter (current Raft instance) and is initiated by candidate requesting vote
 // voter determines if it will vote for candidate and returns reply
