@@ -59,7 +59,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// let leader know it is behind if their term < instances
 	if args.LeaderTerm < rf.currentTerm {
-		DPrintf("AppendEntries %d ->: %d leader behind current; ", args.LeaderId, rf.me)
+		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; Leader behind follower %s", uid)
 		reply.Term = rf.currentTerm
 		reply.Success = false
 		return
@@ -70,11 +70,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = args.LeaderTerm
+	reply.Term = args.LeaderTerm
 	reply.Success = true
 
 	// decrement nextIndex
 	if len(rf.logs) != 0 && args.LeaderPrevLogIndex > len(rf.logs) {
-		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); LeaderID: %d; uid: %s", args.LeaderPrevLogIndex, len(rf.logs), args.LeaderId, uid)
+		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); uid: %s", args.LeaderPrevLogIndex, len(rf.logs), uid)
 		reply.Success = false
 		return
 	}
@@ -83,7 +84,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// reply false and delete all existing entries from prevLogIndex forward
 	if args.LeaderPrevLogIndex != 0 && args.LeaderPrevLogIndex <= len(rf.logs) &&
 		args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex-1].Term {
-		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; args.LeaderPrevLogTerm (%d) != rf.logs[args.LeaderPrevLogIndex].Term (%d); LeaderID: %d;", args.LeaderPrevLogIndex, args.LeaderPrevLogTerm, rf.logs[args.LeaderPrevLogIndex].Term)
+		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogTerm (%d) != rf.logs[%d - 1].Term (%d); uid %s", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, rf.logs[args.LeaderPrevLogIndex-1].Term, uid)
 		rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
 		reply.Success = false
 		return
@@ -106,17 +107,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // sendAppendEntry method
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
+// TestFailAgree2B
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
 
-	args := rf.makeAppendEntriesArgs(server)
-	arr := rf.logs[args.LeaderPrevLogIndex:]
-
-	args.LeaderLogEntries = Compress(EncodeToBytes(arr))
-	DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
-	reply := &AppendEntriesReply{}
-
 	for !rf.killed() {
-		DPrint(rf.me, "sendAppendEntry", "Calling Raft.AppendEntries RPC for %d", server)
+		reply := &AppendEntriesReply{}
+
+		args := rf.makeAppendEntriesArgs(server)
+		arr := rf.logs[args.LeaderPrevLogIndex:]
+		args.LeaderLogEntries = Compress(EncodeToBytes(arr))
+		DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
+
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
 
@@ -129,8 +130,8 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			DPrint(rf.me, "sendAppendEntry", "RPC success for %d", server)
 			// Instead, the correct thing to do is update matchIndex to be prevLogIndex + len(entries[]) from the arguments you sent in the RPC originally.
 			rf.mu.Lock()
-			rf.matchIndex[server] = args.LeaderPrevLogIndex + len(args.LeaderLogEntries)
-			rf.nextIndex[server]++
+			rf.matchIndex[server] = args.LeaderPrevLogIndex + len(arr)
+			rf.nextIndex[server] = args.LeaderPrevLogIndex + len(arr) + 1
 			rf.mu.Unlock()
 			replicationChan <- 1
 			return
@@ -146,12 +147,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 
 		rf.mu.Lock()
 		rf.nextIndex[server]--
-		nextIndex := rf.nextIndex[server]
 		rf.mu.Unlock()
-
-		args.LeaderPrevLogIndex = nextIndex - 1
-		args.LeaderPrevLogTerm = rf.logs[nextIndex-1].Term
-		args.LeaderLogEntries = Compress(EncodeToBytes(rf.logs[nextIndex-1 : rf.commitIndex]))
 
 		DPrint(rf.me, "sendAppendEntry", "Repeating request %d", server)
 		time.Sleep(10 * time.Millisecond)
@@ -205,8 +201,14 @@ func (rf *Raft) sendHeartbeat(server int) {
 	// DPrint(rf.me, "sendHearbeat", "recieved from %d", server)
 
 	// convert to follower
-	if ok && !reply.Success && reply.Term > args.LeaderTerm {
-		rf.becomeFollower(reply.Term)
+	if ok && !reply.Success {
+		if reply.Term > args.LeaderTerm {
+			rf.becomeFollower(reply.Term)
+		} else {
+			rf.mu.Lock()
+			rf.nextIndex[server]--
+			rf.mu.Unlock()
+		}
 	}
 }
 
