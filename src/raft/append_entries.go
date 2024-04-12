@@ -51,9 +51,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	defer rf.mu.Unlock()
 	logBytes := Decompress(args.LeaderLogEntries)
 	logs := DecodeToLogs(logBytes)
+	uid := generateUID()
 
 	if len(logs) != 0 {
-		DPrint(rf.me, "AppendEntries RPC", "Called By %d; logs: %v", args.LeaderId, logs)
+		DPrint(rf.me, "AppendEntries RPC", "Called By %d to append logs: %v; uid: %s", args.LeaderId, logs, uid)
 	}
 
 	// let leader know it is behind if their term < instances
@@ -73,7 +74,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// decrement nextIndex
 	if len(rf.logs) != 0 && args.LeaderPrevLogIndex > len(rf.logs) {
-		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > len(rf.logs) (%d); LeaderID: %d;", args.LeaderPrevLogIndex, len(rf.logs), args.LeaderId)
+		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); LeaderID: %d; uid: %s", args.LeaderPrevLogIndex, len(rf.logs), args.LeaderId, uid)
 		reply.Success = false
 		return
 	}
@@ -92,7 +93,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// send to consumer
 	if len(logs) != 0 {
 		rf.logs = append(rf.logs, logs...)
-		DPrint(rf.me, "AppendEntries RPC", "Called By %d; appending to %v logs; %v", args.LeaderId, logs, rf.logs)
+		DPrint(rf.me, "AppendEntries RPC", "Success; Appended logs: %v; uid: %s", rf.logs, uid)
 		go rf.logQueueProducer(len(rf.logs))
 	}
 
