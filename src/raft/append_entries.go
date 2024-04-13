@@ -104,31 +104,36 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 }
 
-// sendAppendEntry method
+// sendAppendEntry method: leader only
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
 // TestFailAgree2B
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
 
 	for !rf.killed() {
+		// need to make new params for RPC
+		// or else error occurs testing
 		reply := &AppendEntriesReply{}
 
 		args := rf.makeAppendEntriesArgs(server)
 		arr := rf.logs[args.LeaderPrevLogIndex:]
 		args.LeaderLogEntries = Compress(EncodeToBytes(arr))
+
 		DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
 
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+
 		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
 
+		// if there is an error retry the reqeuest
 		if !ok {
-			DPrint(rf.me, "sendAppendEntry", "RPC Error for %d", server)
 			continue
 		}
 
+		// if success, update servers matchIndex and nextIndex
+		// use prevLogIndex + # logs added if state has changed
+		// then pass vote to replication channel
 		if reply.Success {
-			DPrint(rf.me, "sendAppendEntry", "RPC success for %d", server)
-			// Instead, the correct thing to do is update matchIndex to be prevLogIndex + len(entries[]) from the arguments you sent in the RPC originally.
 			rf.mu.Lock()
 			rf.matchIndex[server] = args.LeaderPrevLogIndex + len(arr)
 			rf.nextIndex[server] = args.LeaderPrevLogIndex + len(arr) + 1
@@ -137,19 +142,21 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			return
 		}
 
-		// convert to follower; dont retry?
+		// the follower has a higher term
+		// convert leader to follower
+		// pass update to isFollower channel
 		if reply.Term > args.LeaderTerm {
-			DPrint(rf.me, "sendAppendEntry", "Converting to follower")
 			rf.becomeFollower(reply.Term)
 			isFollower <- true
 			return
 		}
 
+		// unsuccessful so nextIndex is too high; 
+		// must decrement 
 		rf.mu.Lock()
 		rf.nextIndex[server]--
 		rf.mu.Unlock()
 
-		DPrint(rf.me, "sendAppendEntry", "Repeating request %d", server)
 		time.Sleep(10 * time.Millisecond)
 	}
 }
