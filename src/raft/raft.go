@@ -130,7 +130,8 @@ func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 //   - newIndex > commitIndex: can't go backwards
 //   - log[newIndex].term == currentTerm: can't go backwards
 //
-// TODO: can delete all old logs
+// TODO: garbage collect old logs before index as they have been replicated
+// - this requires some readjustment of indicies. maybe updating matchIndex to -1?
 func (rf *Raft) calculateCommitIndex() {
 	peerCount := len(rf.peers)
 	s := make([]int, peerCount)
