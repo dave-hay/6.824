@@ -51,7 +51,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	isVoterValid := rf.votedFor == -1 || rf.votedFor == args.CandidateId
 	// candidates log is at least as up to date as voters log
-	isCandidateValid := args.CandidateLastLogIndex >= len(rf.logs)
+	isCandidateValid := args.CandidateLastLogIndex == 0 || len(rf.logs) == 0 || args.CandidateLastLogIndex >= len(rf.logs) && rf.logs[len(rf.logs)-1].Term <= args.CandidateLastLogTerm
 
 	if isVoterValid && isCandidateValid {
 		DPrintf("raft %d; RequestVote; voted for candidate %d", rf.me, args.CandidateId)
