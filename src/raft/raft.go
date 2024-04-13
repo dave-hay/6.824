@@ -124,12 +124,12 @@ func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 // calculateCommitIndex: Leader Only
 // once a log has been replicated on a majority of nodes it is considered
 // committed and the leaders commitIndex can be updated based on the
-// following rules.
-// - a majority of matchIndex[i]'s ≥ N: by picking the middle index in a
-// 		sorted list it implies all to the left are >= that value.
-// - newIndex > commitIndex: can't go backwards
-// - log[newIndex].term == currentTerm: can't go backwards
-// 
+// following rules:
+//   - a majority of matchIndex[i]'s ≥ N: by picking the middle index in a
+//     sorted list it implies all to the left are >= that value.
+//   - newIndex > commitIndex: can't go backwards
+//   - log[newIndex].term == currentTerm: can't go backwards
+//
 // TODO: can delete all old logs
 func (rf *Raft) calculateCommitIndex() {
 	peerCount := len(rf.peers)
@@ -139,6 +139,7 @@ func (rf *Raft) calculateCommitIndex() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	DPrint(rf.me, "calculateCommitIndex", "called")
 	for i := range peerCount {
 		if i != rf.me {
 			s[i] = rf.matchIndex[i]
@@ -149,6 +150,7 @@ func (rf *Raft) calculateCommitIndex() {
 	index := s[peerCount/2]
 
 	if index != -1 || index > rf.commitIndex || rf.logs[index-1].Term == rf.currentTerm {
+		DPrint(rf.me, "calculateCommitIndex", "updated commitIndex=%d", index)
 		rf.commitIndex = index
 	}
 }

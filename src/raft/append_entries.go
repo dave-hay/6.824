@@ -95,12 +95,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if len(logs) != 0 {
 		rf.logs = append(rf.logs, logs...)
 		DPrint(rf.me, "AppendEntries RPC", "Success; Appended logs: %v; uid: %s", rf.logs, uid)
-		go rf.logQueueProducer(len(rf.logs))
 	}
 
 	// update commitIndex with highest known log entry
 	if args.LeaderCommitIndex > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommitIndex, len(rf.logs))
+		DPrint(rf.me, "AppendEntries RPC", "Updated commitIndex=%d; uid=%s", rf.commitIndex, uid)
+	}
+
+	if rf.commitIndex > rf.lastApplied {
+		go rf.logQueueProducer(rf.commitIndex)
 	}
 }
 
@@ -151,8 +155,8 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			return
 		}
 
-		// unsuccessful so nextIndex is too high; 
-		// must decrement 
+		// unsuccessful so nextIndex is too high;
+		// must decrement
 		rf.mu.Lock()
 		rf.nextIndex[server]--
 		rf.mu.Unlock()
@@ -161,7 +165,11 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 	}
 }
 
-// sendLogEntries
+// sendLogEntries: leader method
+// called by leader when client calls Start() and sends new log to all peers
+// for replication. successful if a majority of peers replicate the log
+// in-memory. the leader then updates it's commitIndex and processes logs
+// up to that new commitIndex. if leader is a follower it will be updated.
 func (rf *Raft) sendLogEntries() {
 	peerCount := len(rf.peers)
 	replicationCount := 0
@@ -177,18 +185,14 @@ func (rf *Raft) sendLogEntries() {
 		}
 	}
 
-	// determine quorum of logs sent to finalize commit
 	for range peerCount - 1 {
 		select {
+		// determine quorum of logs sent to finalize commit
 		case outcome := <-replicationChan:
 			replicationCount += outcome
-			DPrint(rf.me, "sendLogEntries", "replicaitonCount: %d; outcome: %d; replicationsNeeded: %d", replicationCount, outcome, replicationsNeeded)
 			if replicationCount >= replicationsNeeded {
-				DPrint(rf.me, "sendLogEntries", "replicationsNeeded >= replicaitonCount == %d >= %d;", replicationsNeeded, replicationCount)
-				rf.mu.Lock()
-				rf.commitIndex++
-				rf.mu.Unlock()
-				go rf.logQueueProducer(len(rf.logs))
+				rf.calculateCommitIndex()
+				go rf.logQueueProducer(rf.commitIndex)
 				return
 			}
 		case <-isFollower:
