@@ -74,7 +74,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	reply.Success = true
 
 	// decrement nextIndex
-	if len(rf.logs) != 0 && args.LeaderPrevLogIndex > len(rf.logs) {
+	if args.LeaderPrevLogIndex > len(rf.logs) {
 		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); uid: %s", args.LeaderPrevLogIndex, len(rf.logs), uid)
 		reply.Success = false
 		return
@@ -114,7 +114,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // TestFailAgree2B
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
 
-	for !rf.killed() {
+	for !rf.killed() && rf.getState() == Leader {
 		// need to make new params for RPC
 		// or else error occurs testing
 		reply := &AppendEntriesReply{}
@@ -134,9 +134,6 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			continue
 		}
 
-		if rf.getState() != Leader {
-			return
-		}
 		// if success, update servers matchIndex and nextIndex
 		// use prevLogIndex + # logs added if state has changed
 		// then pass vote to replication channel

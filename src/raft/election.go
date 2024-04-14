@@ -49,13 +49,17 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	} else if args.CandidateTerm > rf.currentTerm {
 		rf.votedFor = -1
+		rf.currentTerm = args.CandidateTerm
+		rf.lastHeardFromLeader = time.Now()
+		rf.state = Follower
 	}
-
-	rf.currentTerm = reply.Term
 
 	isVoterValid := rf.votedFor == -1 || rf.votedFor == args.CandidateId
 	// candidates log is at least as up to date as voters log
-	isCandidateValid := args.CandidateLastLogIndex == 0 || len(rf.logs) == 0 || args.CandidateLastLogIndex >= len(rf.logs) && rf.logs[len(rf.logs)-1].Term <= args.CandidateLastLogTerm
+	isCandidateValid := len(rf.logs) == 0 || args.CandidateLastLogIndex >= len(rf.logs) && rf.logs[len(rf.logs)-1].Term <= args.CandidateLastLogTerm
+
+	DPrintf("raft %d; len(rf.logs)=%d; lastLogIndex=%d >= curLastIndex=%d; candidateTerm=%d curTerm=%v", rf.me, len(rf.logs), args.CandidateLastLogIndex, len(rf.logs), args.CandidateLastLogTerm, rf.logs)
+	DPrintf("raft %d; isVoterValid=%t; isCandidateValid=%t", rf.me, isVoterValid, isCandidateValid)
 
 	if isVoterValid && isCandidateValid {
 		DPrintf("raft %d; RequestVote; voted for candidate %d", rf.me, args.CandidateId)
@@ -75,7 +79,7 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 
 	DPrintf("raft %d; sendRequestVote; sending to %d", rf.me, server)
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	DPrintf("raft %d; sendRequestVote; received reply from %d", rf.me, server)
+	DPrintf("raft %d; sendRequestVote; received reply from %d; votegranted=%t; replyTerm=%d", rf.me, server, reply.VoteGranted, reply.Term)
 
 	if !ok {
 		//  !ok means that there was an error and should re-send the request vote
@@ -83,12 +87,7 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 	} else {
 		if reply.Term > args.CandidateTerm {
 			//  Another server is leader: return to follower state
-			rf.mu.Lock()
-			rf.lastHeardFromLeader = time.Now()
-			rf.votedFor = -1
-			rf.state = Follower
-			rf.currentTerm = reply.Term
-			rf.mu.Unlock()
+			rf.becomeFollower(reply.Term)
 			isFollowerChannel <- true
 			return
 		} else if reply.VoteGranted {
@@ -110,7 +109,7 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 // 3) No win or lose: start over process
 func (rf *Raft) startElection() {
 	rf.mu.Lock()
-	DPrintf("raft %d: called startElection", rf.me)
+	DPrint(rf.me, "startElection", "called")
 	rf.currentTerm++
 	rf.state = Candidate
 	rf.mu.Unlock()
@@ -159,7 +158,7 @@ func (rf *Raft) startElection() {
 // initializes the new nextIndex[] array
 // state is locked until completed
 func (rf *Raft) becomeLeader() {
-	DPrint(rf.me, "becomeLeader", "is now leader")
+	DPrint(rf.me, "becomeLeader", "called")
 	rf.mu.Lock()
 	rf.state = Leader
 	val := len(rf.logs) + 1 // last log index + 1
