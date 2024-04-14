@@ -54,41 +54,43 @@ func (rf *Raft) logQueueConsumer() {
 		rf.lastApplied = index
 		rf.mu.Unlock()
 
-		DPrint(rf.me, "logQueueConsumer()", "sending ApplyMsg to applyCh")
+		DPrint(rf.me, "logQueueConsumer()", "sending ApplyMsg to applyCh for index=%d", index)
 
 		rf.applyCh <- msg
 	}
 }
 
-// Start()
-// the service using Raft (e.g. a k/v server) wants to start
-// agreement on the next command to be appended to Raft's log.
-// start the agreement and return immediately.
-// no guarantee command will be committed to the Raft log
-//
-// index (int): index the command will appear if commited. len(rf.logs) + 1
-// term (int): current term
-// isLeader (bool): if server is leader
-func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := false
+type NewLogQueue struct {
+	entries []LogEntry // where logs applied
+	cond    *sync.Cond
+}
 
-	if rf.getState() != Leader {
-		// DPrint(rf.me, "Start()", "rejected is not leader")
-		return index, term, isLeader
+// newLogProducer
+func (rf *Raft) newLogProducer(entry LogEntry) {
+	rf.newLogQ.cond.L.Lock()
+	defer rf.newLogQ.cond.L.Unlock()
+
+	rf.newLogQ.entries = append(rf.newLogQ.entries, entry)
+
+	rf.newLogQ.cond.Signal()
+	DPrint(rf.me, "newLogProducer()", "appended commit at entry: %v; entries: %v", entry, rf.newLogQ.entries)
+}
+
+// newLogConsumer
+func (rf *Raft) newLogConsumer() {
+	for !rf.killed() {
+		rf.newLogQ.cond.L.Lock()
+		for len(rf.newLogQ.entries) == 0 {
+			rf.newLogQ.cond.Wait()
+		}
+
+		entry := rf.newLogQ.entries[0]
+		rf.newLogQ.entries = rf.newLogQ.entries[1:]
+
+		rf.sendLogEntries()
+		rf.newLogQ.cond.L.Unlock()
+
+		DPrint(rf.me, "newLogConsumer()", "sending ApplyMsg to applyCh for entry=%d", entry)
+
 	}
-
-	rf.mu.Lock()
-	term = rf.currentTerm
-	isLeader = rf.state == Leader
-	index = len(rf.logs) + 1
-	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
-	// DPrint(rf.me, "Start()", "command: %v appended to log; index: %d; logs: %v", command, index, rf.logs)
-	rf.mu.Unlock()
-
-	// fire off AppendEntries
-	go rf.sendLogEntries()
-
-	return index, term, isLeader
 }

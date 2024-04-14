@@ -79,6 +79,7 @@ type Raft struct {
 	applyCh             chan ApplyMsg
 	lastHeardFromLeader time.Time
 	logQueue            LogQueue
+	newLogQ             NewLogQueue
 
 	// leader only, volatile state
 	// contains information about follower servers
@@ -197,6 +198,39 @@ func (rf *Raft) mainLoop() {
 	DPrintf("raft %d: died", rf.me)
 }
 
+// Start()
+// the service using Raft (e.g. a k/v server) wants to start
+// agreement on the next command to be appended to Raft's log.
+// start the agreement and return immediately.
+// no guarantee command will be committed to the Raft log
+//
+// index (int): index the command will appear if commited. len(rf.logs) + 1
+// term (int): current term
+// isLeader (bool): if server is leader
+func (rf *Raft) Start(command interface{}) (int, int, bool) {
+	index := -1
+	term := -1
+	isLeader := false
+
+	if rf.getState() != Leader {
+		// DPrint(rf.me, "Start()", "rejected is not leader")
+		return index, term, isLeader
+	}
+
+	rf.mu.Lock()
+	term = rf.currentTerm
+	isLeader = rf.state == Leader
+	index = len(rf.logs) + 1
+	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
+	// DPrint(rf.me, "Start()", "command: %v appended to log; index: %d; logs: %v", command, index, rf.logs)
+	rf.mu.Unlock()
+
+	// fire off AppendEntries
+	go rf.newLogProducer(LogEntry{Term: term, Command: command})
+
+	return index, term, isLeader
+}
+
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
 // server's port is peers[me]. all the servers' peers[] arrays
@@ -220,10 +254,12 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		applyCh:     applyCh,
 	}
 	rf.logQueue.cond = sync.NewCond(&sync.Mutex{})
+	rf.newLogQ.cond = sync.NewCond(&sync.Mutex{})
 
 	// Your initialization code here (2A, 2B, 2C).
 	go rf.mainLoop()
 	go rf.logQueueConsumer()
+	go rf.newLogConsumer()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
