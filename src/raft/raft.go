@@ -135,8 +135,8 @@ func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 // - this requires some readjustment of indicies. maybe updating matchIndex to -1?
 func (rf *Raft) calculateCommitIndex() {
 	peerCount := len(rf.peers)
-	s := make([]int, peerCount)
-	s[rf.me] = len(rf.logs)
+	s := make([]int, 0, peerCount)
+	s = append(s, len(rf.logs))
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -144,14 +144,15 @@ func (rf *Raft) calculateCommitIndex() {
 	DPrint(rf.me, "calculateCommitIndex", "called")
 	for i := range peerCount {
 		if i != rf.me {
-			s[i] = rf.matchIndex[i]
+			s = append(s, rf.matchIndex[i])
 		}
 	}
 
 	slices.Sort(s)
 	index := s[peerCount/2]
+	// DPrint(rf.me, "calculateCommitIndex", "updated commitIndex=%d; all matchIndexes=%v", index, s)
 
-	if index != -1 || index > rf.commitIndex || rf.logs[index-1].Term == rf.currentTerm {
+	if index != -1 && index > rf.commitIndex && rf.logs[index-1].Term == rf.currentTerm {
 		DPrint(rf.me, "calculateCommitIndex", "updated commitIndex=%d", index)
 		rf.commitIndex = index
 	}

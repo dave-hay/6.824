@@ -134,6 +134,9 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			continue
 		}
 
+		if rf.getState() != Leader {
+			return
+		}
 		// if success, update servers matchIndex and nextIndex
 		// use prevLogIndex + # logs added if state has changed
 		// then pass vote to replication channel
