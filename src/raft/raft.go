@@ -226,7 +226,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Unlock()
 
 	// fire off AppendEntries
-	go rf.newLogProducer(LogEntry{Term: term, Command: command})
+	go rf.newLogProducer()
 
 	return index, term, isLeader
 }

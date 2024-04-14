@@ -61,36 +61,34 @@ func (rf *Raft) logQueueConsumer() {
 }
 
 type NewLogQueue struct {
-	entries []LogEntry // where logs applied
+	entries int // where logs applied
 	cond    *sync.Cond
 }
 
 // newLogProducer
-func (rf *Raft) newLogProducer(entry LogEntry) {
+func (rf *Raft) newLogProducer() {
 	rf.newLogQ.cond.L.Lock()
 	defer rf.newLogQ.cond.L.Unlock()
 
-	rf.newLogQ.entries = append(rf.newLogQ.entries, entry)
+	rf.newLogQ.entries++
 
 	rf.newLogQ.cond.Signal()
-	DPrint(rf.me, "newLogProducer()", "appended commit at entry: %v; entries: %v", entry, rf.newLogQ.entries)
+	DPrint(rf.me, "newLogProducer()", "called; entries: %d", rf.newLogQ.entries)
 }
 
 // newLogConsumer
 func (rf *Raft) newLogConsumer() {
 	for !rf.killed() {
 		rf.newLogQ.cond.L.Lock()
-		for len(rf.newLogQ.entries) == 0 {
+		for rf.newLogQ.entries == 0 {
 			rf.newLogQ.cond.Wait()
 		}
-
-		entry := rf.newLogQ.entries[0]
-		rf.newLogQ.entries = rf.newLogQ.entries[1:]
+		rf.newLogQ.entries--
 
 		rf.sendLogEntries()
 		rf.newLogQ.cond.L.Unlock()
 
-		DPrint(rf.me, "newLogConsumer()", "sending ApplyMsg to applyCh for entry=%d", entry)
+		DPrint(rf.me, "newLogConsumer()", "finished entry=%d", rf.newLogQ.entries)
 
 	}
 }
