@@ -39,32 +39,51 @@ func (rf *Raft) makeRequestVoteArgs() *RequestVoteArgs {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	DPrintf("raft %d; RequestVote; received initialization from %d", rf.me, args.CandidateId)
+	uid := generateUID()
+
+	DPrint(rf.me, "RequestVote RPC", "Raft: %d requested vote; uid: %s", args.CandidateId, uid)
 
 	// if candidates term < voters term; candidate becomes follower
 	if args.CandidateTerm < rf.currentTerm {
-		DPrintf("raft %d; RequestVote; candidate %d should step down", rf.me, args.CandidateId)
+		DPrint(rf.me, "RequestVote RPC", "Voter has larger term; uid: %s", uid)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
-	} else if args.CandidateTerm > rf.currentTerm {
+	}
+
+	// if leaders term at least as large as candidate's term, then the
+	// candidate returns to follower state. (5.2)
+	if rf.state == Candidate && args.CandidateTerm >= rf.currentTerm {
 		rf.votedFor = -1
 		rf.currentTerm = args.CandidateTerm
 		rf.lastHeardFromLeader = time.Now()
 		rf.state = Follower
 	}
 
-	isVoterValid := rf.votedFor == -1 || rf.votedFor == args.CandidateId
-	// candidates log is at least as up to date as voters log
-	isCandidateValid := len(rf.logs) == 0 || args.CandidateLastLogIndex >= len(rf.logs) && rf.logs[len(rf.logs)-1].Term <= args.CandidateLastLogTerm
+	// voter is valid if it has not voted or has already voted for candidate
+	if rf.votedFor == -1 || rf.votedFor == args.CandidateId {
 
-	DPrintf("raft %d; len(rf.logs)=%d; lastLogIndex=%d >= curLastIndex=%d; candidateTerm=%d curTerm=%v", rf.me, len(rf.logs), args.CandidateLastLogIndex, len(rf.logs), args.CandidateLastLogTerm, rf.logs)
-	DPrintf("raft %d; isVoterValid=%t; isCandidateValid=%t", rf.me, isVoterValid, isCandidateValid)
+		// if log empty then automatically vote for candidate
+		if len(rf.logs) == 0 {
+			rf.votedFor = args.CandidateId
+			reply.VoteGranted = true
+			return
+		}
 
-	if isVoterValid && isCandidateValid {
-		DPrintf("raft %d; RequestVote; voted for candidate %d", rf.me, args.CandidateId)
-		rf.votedFor = args.CandidateId
-		reply.VoteGranted = true
+		// if logs have last entries with different terms, log w/later term wins (5.4.1)
+		if args.CandidateLastLogTerm > rf.logs[len(rf.logs)-1].Term {
+			DPrint(rf.me, "RequestVote RPC", "Successful; CandidateLastLogTerm=%d > CurLastLogTerm=%d; uid: %s", args.CandidateLastLogTerm, rf.logs[len(rf.logs)-1].Term, uid)
+			rf.votedFor = args.CandidateId
+			reply.VoteGranted = true
+			return
+		}
+
+		// if logs end with same term, longest log wins (5.4.1)
+		if args.CandidateLastLogTerm == rf.logs[len(rf.logs)-1].Term && args.CandidateLastLogIndex >= len(rf.logs) {
+			DPrint(rf.me, "RequestVote RPC", "Success; Same LogTerm + CandidateLastLogIndex=%d >= CurLastIndex=%d; uid: %s", args.CandidateLastLogIndex, len(rf.logs), uid)
+			rf.votedFor = args.CandidateId
+			reply.VoteGranted = true
+		}
 	}
 }
 
