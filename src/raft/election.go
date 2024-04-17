@@ -96,9 +96,9 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 	args := rf.makeRequestVoteArgs()
 	reply := &RequestVoteReply{}
 
-	DPrintf("raft %d; sendRequestVote; sending to %d", rf.me, server)
+	// DPrintf("raft %d; sendRequestVote; sending to %d", rf.me, server)
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	DPrintf("raft %d; sendRequestVote; received reply from %d; votegranted=%t; replyTerm=%d", rf.me, server, reply.VoteGranted, reply.Term)
+	// DPrintf("raft %d; sendRequestVote; received reply from %d; votegranted=%t; replyTerm=%d", rf.me, server, reply.VoteGranted, reply.Term)
 
 	if !ok {
 		//  !ok means that there was an error and should re-send the request vote
@@ -131,6 +131,7 @@ func (rf *Raft) startElection() {
 	DPrint(rf.me, "startElection", "called")
 	rf.currentTerm++
 	rf.state = Candidate
+	timeout := rf.getElectionTimeout()
 	rf.mu.Unlock()
 
 	peerCount := len(rf.peers)
@@ -160,6 +161,9 @@ func (rf *Raft) startElection() {
 			}
 		case <-isFollowerChannel:
 			voteCount = 0
+			return
+		case <-time.After(timeout):
+			DPrint(rf.me, "startElection", "election timed out")
 			return
 		}
 	}

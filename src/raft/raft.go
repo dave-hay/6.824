@@ -168,9 +168,13 @@ func (rf *Raft) leaderLoop() {
 	}
 }
 
+func (rf *Raft) candidateLoop() {
+	rf.startElection()
+}
+
 // followerLoop: start election if too much time has passed
 func (rf *Raft) followerLoop() {
-	for !rf.killed() && rf.getState() != Leader {
+	for !rf.killed() && rf.getState() == Follower {
 		electionTimeout := rf.getElectionTimeout()
 		time.Sleep(electionTimeout)
 
@@ -190,6 +194,8 @@ func (rf *Raft) mainLoop() {
 		switch rf.getState() {
 		case Leader:
 			rf.leaderLoop()
+		case Candidate:
+			rf.candidateLoop()
 		default:
 			rf.followerLoop()
 		}
