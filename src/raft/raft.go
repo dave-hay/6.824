@@ -150,7 +150,7 @@ func (rf *Raft) calculateCommitIndex() {
 
 	slices.Sort(s)
 	index := s[peerCount/2]
-	// DPrint(rf.me, "calculateCommitIndex", "updated commitIndex=%d; all matchIndexes=%v", index, s)
+	DPrint(rf.me, "calculateCommitIndex", "new commitIndex=%d; all matchIndexes=%v", index, s)
 
 	if index != -1 && index > rf.commitIndex && rf.logs[index-1].Term == rf.currentTerm {
 		DPrint(rf.me, "calculateCommitIndex", "updated commitIndex=%d", index)

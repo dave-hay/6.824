@@ -28,7 +28,7 @@ func (rf *Raft) logQueueProducer(index int) {
 	}
 
 	rf.logQueue.cond.Signal()
-	DPrint(rf.me, "logQueueProducer()", "appended commit at index: %v; indexes: %v", index, rf.logQueue.indexes)
+	// DPrint(rf.me, "logQueueProducer()", "appended commit at index: %v; indexes: %v", index, rf.logQueue.indexes)
 }
 
 // logQueueConsumer
@@ -54,7 +54,7 @@ func (rf *Raft) logQueueConsumer() {
 		rf.lastApplied = index
 		rf.mu.Unlock()
 
-		DPrint(rf.me, "logQueueConsumer()", "sending ApplyMsg to applyCh for index=%d", index)
+		// DPrint(rf.me, "logQueueConsumer()", "sending ApplyMsg to applyCh for index=%d", index)
 
 		rf.applyCh <- msg
 	}
@@ -73,7 +73,7 @@ func (rf *Raft) newLogProducer() {
 	rf.newLogQ.entries++
 
 	rf.newLogQ.cond.Signal()
-	DPrint(rf.me, "newLogProducer()", "called; entries: %d", rf.newLogQ.entries)
+	// DPrint(rf.me, "newLogProducer()", "called; entries: %d", rf.newLogQ.entries)
 }
 
 // newLogConsumer
@@ -88,7 +88,7 @@ func (rf *Raft) newLogConsumer() {
 		rf.sendLogEntries()
 		rf.newLogQ.cond.L.Unlock()
 
-		DPrint(rf.me, "newLogConsumer()", "finished entry=%d", rf.newLogQ.entries)
+		// DPrint(rf.me, "newLogConsumer()", "finished entry=%d", rf.newLogQ.entries)
 
 	}
 }
