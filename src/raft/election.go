@@ -53,11 +53,16 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	// if leaders term at least as large as candidate's term, then the
 	// candidate returns to follower state. (5.2)
-	if rf.state == Candidate && args.CandidateTerm >= rf.currentTerm {
+	// it's implied that the candidate's term >= current term
+	if args.CandidateTerm > rf.currentTerm {
 		rf.votedFor = -1
 		rf.currentTerm = args.CandidateTerm
-		rf.lastHeardFromLeader = time.Now()
 		rf.state = Follower
+	}
+
+	if rf.commitIndex > rf.lastApplied {
+		DPrint(rf.me, "RequestVote RPC", "commitIndex (%d) > lastApplied (%d)", rf.commitIndex, rf.lastApplied)
+		go rf.logQueueProducer(rf.commitIndex)
 	}
 
 	// voter is valid if it has not voted or has already voted for candidate
@@ -67,24 +72,32 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		if len(rf.logs) == 0 {
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
+			rf.lastHeardFromLeader = time.Now()
 			return
 		}
 
+		lastLogTerm := rf.logs[len(rf.logs)-1].Term
+
 		// if logs have last entries with different terms, log w/later term wins (5.4.1)
-		if args.CandidateLastLogTerm > rf.logs[len(rf.logs)-1].Term {
-			DPrint(rf.me, "RequestVote RPC", "Successful; CandidateLastLogTerm=%d > CurLastLogTerm=%d; uid: %s", args.CandidateLastLogTerm, rf.logs[len(rf.logs)-1].Term, uid)
+		if args.CandidateLastLogTerm > lastLogTerm {
+			DPrint(rf.me, "RequestVote RPC", "Successful; CandidateLastLogTerm=%d > CurLastLogTerm=%d; uid: %s", args.CandidateLastLogTerm, lastLogTerm, uid)
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
+			rf.lastHeardFromLeader = time.Now()
 			return
 		}
 
 		// if logs end with same term, longest log wins (5.4.1)
-		if args.CandidateLastLogTerm == rf.logs[len(rf.logs)-1].Term && args.CandidateLastLogIndex >= len(rf.logs) {
+		if args.CandidateLastLogTerm == lastLogTerm && args.CandidateLastLogIndex >= len(rf.logs) {
 			DPrint(rf.me, "RequestVote RPC", "Success; Same LogTerm + CandidateLastLogIndex=%d >= CurLastIndex=%d; uid: %s", args.CandidateLastLogIndex, len(rf.logs), uid)
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
+			rf.lastHeardFromLeader = time.Now()
+			return
 		}
 	}
+
+	reply.VoteGranted = false
 }
 
 // leaders must check that the term hasn't changed since sending the RPC
