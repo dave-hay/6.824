@@ -100,8 +100,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// update commitIndex with highest known log entry
 	if args.LeaderCommitIndex > rf.commitIndex {
-		rf.commitIndex = min(args.LeaderCommitIndex, len(rf.logs))
-		DPrint(rf.me, "AppendEntries RPC", "Updated commitIndex=%d; uid=%s", rf.commitIndex, uid)
+		lastNewEntryIndex := args.LeaderPrevLogIndex + len(logs)
+		rf.commitIndex = min(args.LeaderCommitIndex, lastNewEntryIndex)
+		DPrint(rf.me, "AppendEntries RPC", "Updated commitIndex=%d; leader=%d", rf.commitIndex, leader)
 	}
 
 	if rf.commitIndex > rf.lastApplied {
@@ -140,9 +141,12 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		// then pass vote to replication channel
 		if reply.Success {
 			rf.mu.Lock()
+			DPrint(rf.me, "sendAppendEntry", "Updating server=%d match index=%d", server, args.LeaderPrevLogIndex+len(arr))
 			rf.matchIndex[server] = args.LeaderPrevLogIndex + len(arr)
 			rf.nextIndex[server] = args.LeaderPrevLogIndex + len(arr) + 1
 			rf.mu.Unlock()
+			rf.calculateCommitIndex()
+			go rf.logQueueProducer(rf.commitIndex)
 			replicationChan <- 1
 			return
 		}
