@@ -93,8 +93,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// append new entries not already in the log
 	// send to consumer
 	if len(logs) != 0 {
-		rf.logs = append(rf.logs, logs...)
-		DPrint(rf.me, "AppendEntries RPC", "Success; Appended logs: %v; uid: %s", rf.logs, uid)
+		rf.logs = append(rf.logs[:args.LeaderPrevLogIndex], logs...)
+		DPrint(rf.me, "AppendEntries RPC", "Success info; LeaderPrevLogTerm=%d; LeaderPrevLogIndex=%d; currentIndex=%d; leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, len(rf.logs), leader)
+		DPrint(rf.me, "AppendEntries RPC", "Success; \nAppending logs: %v \nto: %v \nleader=%d", logs, rf.logs, leader)
 	}
 
 	// update commitIndex with highest known log entry
