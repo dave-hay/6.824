@@ -291,17 +291,18 @@ type PersistentState struct {
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
+	rf.mu.Lock()
 	e.Encode(PersistentState{
 		CurrentTerm: rf.currentTerm,
 		VotedFor:    rf.votedFor,
 		Logs:        rf.logs,
 	})
+	rf.mu.Unlock()
 	data := w.Bytes()
 	rf.persister.SaveRaftState(data)
+	DPrint(rf.me, "persist", "Success")
 }
 
 // restore previously persisted state.
@@ -309,8 +310,6 @@ func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	// Your code here (2C).
 	// Example:
 	r := bytes.NewBuffer(data)
@@ -318,12 +317,16 @@ func (rf *Raft) readPersist(data []byte) {
 	var savedState PersistentState
 
 	if d.Decode(&savedState) != nil {
+		DPrint(rf.me, "readPersist", "failure")
 		log.Fatalf("error decoding state %v", r)
 	} else {
+		rf.mu.Lock()
 		rf.currentTerm = savedState.CurrentTerm
 		rf.votedFor = savedState.VotedFor
 		rf.logs = savedState.Logs
+		rf.mu.Unlock()
 	}
+	DPrint(rf.me, "readPersist", "Success")
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
