@@ -84,6 +84,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex-1].Term {
 		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogTerm (%d) != rf.logs[%d - 1].Term (%d); currentTerm=%d leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, rf.logs[args.LeaderPrevLogIndex-1].Term, rf.currentTerm, leader)
 		rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
+		// TODO: Persist
 		reply.Success = false
 		return
 	}
@@ -92,6 +93,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// send to consumer
 	if len(logs) != 0 {
 		rf.logs = append(rf.logs[:args.LeaderPrevLogIndex], logs...)
+		// TODO: Persist
 		DPrint(rf.me, "AppendEntries RPC", "Success info; LeaderPrevLogTerm=%d; LeaderPrevLogIndex=%d; currentIndex=%d; leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, len(rf.logs), leader)
 	}
 

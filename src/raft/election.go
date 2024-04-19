@@ -57,6 +57,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if args.CandidateTerm > rf.currentTerm {
 		rf.votedFor = -1
 		rf.currentTerm = args.CandidateTerm
+		// TODO: Persist
 		rf.state = Follower
 	}
 
@@ -144,6 +145,7 @@ func (rf *Raft) startElection() {
 	DPrint(rf.me, "startElection", "called")
 	rf.currentTerm++
 	rf.state = Candidate
+	// TODO: Persist
 	timeout := rf.getElectionTimeout()
 	rf.mu.Unlock()
 
@@ -213,6 +215,7 @@ func (rf *Raft) becomeLeader() {
 	rf.nextIndex = newNextIndex
 	rf.matchIndex = newMatchIndex
 	rf.mu.Unlock()
+	// TODO: Persist
 }
 
 // becomeFollower() method
@@ -225,4 +228,5 @@ func (rf *Raft) becomeFollower(currentTerm int) {
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = currentTerm
+	// TODO: Persist
 }
