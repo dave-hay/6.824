@@ -18,11 +18,14 @@ package raft
 //
 
 import (
+	"bytes"
+	"log"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"6.824/labgob"
 	"6.824/labrpc"
 )
 
@@ -274,42 +277,53 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	return rf
 }
 
+type PersistentState struct {
+	CurrentTerm int
+	VotedFor    int
+	Logs        []LogEntry
+}
+
+// persist()
+// updated on stable storage before respondig to RPCs
+// currentTerm, votedFor, log[] (Figure 2)
 // save Raft's persistent state to stable storage,
 // where it can later be retrieved after a crash and restart.
-// see paper's Figure 2 for a description of what should be persistent.
-//
-//lint:ignore U1000 Ignore unused function temporarily for debugging
 func (rf *Raft) persist() {
 	// Your code here (2C).
 	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(PersistentState{
+		CurrentTerm: rf.currentTerm,
+		VotedFor:    rf.votedFor,
+		Logs:        rf.logs,
+	})
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 // restore previously persisted state.
-//
-//lint:ignore U1000 Ignore unused function temporarily for debugging
 func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	// Your code here (2C).
 	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var savedState PersistentState
+
+	if d.Decode(&savedState) != nil {
+		log.Fatalf("error decoding state %v", r)
+	} else {
+		rf.currentTerm = savedState.CurrentTerm
+		rf.votedFor = savedState.VotedFor
+		rf.logs = savedState.Logs
+	}
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
