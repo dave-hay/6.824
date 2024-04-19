@@ -101,6 +101,19 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	reply.VoteGranted = false
 }
 
+func (rf *Raft) voteGranted(candidateId int, reply *RequestVoteReply) {
+	rf.mu.Lock()
+	rf.votedFor = candidateId
+	rf.mu.Unlock()
+
+	rf.persist()
+
+	rf.mu.Lock()
+	reply.VoteGranted = true
+	rf.lastHeardFromLeader = time.Now()
+	rf.mu.Unlock()
+}
+
 // leaders must check that the term hasn't changed since sending the RPC
 // leaders must account for the possibility that replies from concurrent RPCs to the same follower have changed the leader's state (e.g. nextIndex).
 
