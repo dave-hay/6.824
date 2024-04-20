@@ -48,7 +48,6 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 // for replicating log entries + heartbeats
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	logBytes := Decompress(args.LeaderLogEntries)
 	logs := DecodeToLogs(logBytes)
 	leader := args.LeaderId
@@ -58,6 +57,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; Leader behind follower; leader=%d", leader)
 		reply.Term = rf.currentTerm
 		reply.Success = false
+		rf.mu.Unlock()
 		return
 	}
 
@@ -73,6 +73,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.LeaderPrevLogIndex > len(rf.logs) {
 		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); leader=%d", args.LeaderPrevLogIndex, len(rf.logs), leader)
 		reply.Success = false
+		rf.mu.Unlock()
+		rf.persist()
 		return
 	}
 
@@ -86,14 +88,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
 		// TODO: Persist
 		reply.Success = false
+		rf.mu.Unlock()
+		rf.persist()
 		return
 	}
 
+	defer rf.mu.Unlock()
 	// append new entries not already in the log
 	// send to consumer
 	if len(logs) != 0 {
 		rf.logs = append(rf.logs[:args.LeaderPrevLogIndex], logs...)
-		// TODO: Persist
 		DPrint(rf.me, "AppendEntries RPC", "Success info; LeaderPrevLogTerm=%d; LeaderPrevLogIndex=%d; currentIndex=%d; leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, len(rf.logs), leader)
 	}
 

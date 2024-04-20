@@ -72,6 +72,7 @@ type Raft struct {
 	currentTerm int        // latest term server has seen; 0 default
 	votedFor    int        // candidateId recieved vote in cur term; -1 if none
 	logs        []LogEntry // first index 1
+	lastIndex   int
 	// logIndex of len(logs) - 1
 
 	// volatile state
