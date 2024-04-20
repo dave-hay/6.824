@@ -38,7 +38,6 @@ func (rf *Raft) makeRequestVoteArgs() *RequestVoteArgs {
 // voter denies its vote if its own log is more up-to-date than that of the candidate.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	uid := generateUID()
 
 	DPrint(rf.me, "RequestVote RPC", "Raft: %d requested vote; uid: %s", args.CandidateId, uid)
@@ -48,6 +47,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		DPrint(rf.me, "RequestVote RPC", "Voter has larger term; uid: %s", uid)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
+		rf.mu.Unlock()
+
+		rf.persist()
 		return
 	}
 
@@ -57,7 +59,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if args.CandidateTerm > rf.currentTerm {
 		rf.votedFor = -1
 		rf.currentTerm = args.CandidateTerm
-		// TODO: Persist
 		rf.state = Follower
 	}
 
@@ -74,6 +75,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
 			rf.lastHeardFromLeader = time.Now()
+			rf.mu.Unlock()
+			rf.persist()
 			return
 		}
 
@@ -85,6 +88,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
 			rf.lastHeardFromLeader = time.Now()
+			rf.mu.Unlock()
+			rf.persist()
 			return
 		}
 
@@ -94,24 +99,24 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
 			rf.lastHeardFromLeader = time.Now()
+			rf.mu.Unlock()
+			rf.persist()
 			return
 		}
 	}
 
 	reply.VoteGranted = false
+	rf.mu.Unlock()
+	rf.persist()
 }
 
 func (rf *Raft) voteGranted(candidateId int, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	rf.votedFor = candidateId
+	rf.lastHeardFromLeader = time.Now()
 	rf.mu.Unlock()
 
 	rf.persist()
-
-	rf.mu.Lock()
-	reply.VoteGranted = true
-	rf.lastHeardFromLeader = time.Now()
-	rf.mu.Unlock()
 }
 
 // leaders must check that the term hasn't changed since sending the RPC
@@ -158,9 +163,9 @@ func (rf *Raft) startElection() {
 	DPrint(rf.me, "startElection", "called")
 	rf.currentTerm++
 	rf.state = Candidate
-	// TODO: Persist
 	timeout := rf.getElectionTimeout()
 	rf.mu.Unlock()
+	rf.persist()
 
 	peerCount := len(rf.peers)
 	instanceId := rf.me
@@ -214,6 +219,7 @@ func (rf *Raft) becomeLeader() {
 	rf.state = Leader
 	val := len(rf.logs) + 1 // last log index + 1
 	rf.mu.Unlock()
+	rf.persist()
 
 	peerCount := len(rf.peers)
 	newNextIndex := make([]int, peerCount)
@@ -228,7 +234,6 @@ func (rf *Raft) becomeLeader() {
 	rf.nextIndex = newNextIndex
 	rf.matchIndex = newMatchIndex
 	rf.mu.Unlock()
-	// TODO: Persist
 }
 
 // becomeFollower() method
@@ -236,10 +241,11 @@ func (rf *Raft) becomeLeader() {
 func (rf *Raft) becomeFollower(currentTerm int) {
 	DPrint(rf.me, "becomeFollower", "is now follower")
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	rf.lastHeardFromLeader = time.Now()
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = currentTerm
-	// TODO: Persist
+	rf.mu.Unlock()
+
+	rf.persist()
 }
