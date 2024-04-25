@@ -57,7 +57,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// let leader know it is behind if their term < instances
 	if args.LeaderTerm < rf.currentTerm {
-		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; Leader behind follower; leader=%d", leader)
+		// DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; Leader behind follower; leader=%d", leader)
 		reply.Term = rf.currentTerm
 		reply.Success = false
 		rf.mu.Unlock()
@@ -74,7 +74,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// decrement nextIndex
 	if args.LeaderPrevLogIndex > len(rf.logs) {
-		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); leader=%d", args.LeaderPrevLogIndex, len(rf.logs), leader)
+		// DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); leader=%d", args.LeaderPrevLogIndex, len(rf.logs), leader)
 		reply.Success = false
 		reply.ConflictTerm = -1
 		reply.ConflictIndex = -1
@@ -117,14 +117,14 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// send to consumer
 	if len(logs) != 0 {
 		rf.logs = append(rf.logs[:args.LeaderPrevLogIndex], logs...)
-		DPrint(rf.me, "AppendEntries RPC", "Success info; LeaderPrevLogTerm=%d; LeaderPrevLogIndex=%d; currentIndex=%d; leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, len(rf.logs), leader)
+		// DPrint(rf.me, "AppendEntries RPC", "Success info; LeaderPrevLogTerm=%d; LeaderPrevLogIndex=%d; currentIndex=%d; leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, len(rf.logs), leader)
 	}
 
 	// update commitIndex with highest known log entry
 	if args.LeaderCommitIndex > rf.commitIndex {
 		lastNewEntryIndex := args.LeaderPrevLogIndex + len(logs)
 		rf.commitIndex = min(args.LeaderCommitIndex, lastNewEntryIndex)
-		DPrint(rf.me, "AppendEntries RPC", "Updated commitIndex=%d; leader=%d", rf.commitIndex, leader)
+		// DPrint(rf.me, "AppendEntries RPC", "Updated commitIndex=%d; leader=%d", rf.commitIndex, leader)
 	}
 
 	if rf.commitIndex > rf.lastApplied {
@@ -147,7 +147,8 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		arr := rf.logs[args.LeaderPrevLogIndex:]
 		args.LeaderLogEntries = Compress(EncodeToBytes(arr))
 
-		DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
+		// DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
+		DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; ", server, args.LeaderPrevLogIndex)
 
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
@@ -187,6 +188,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		// Case 1: follower does not have an entry at args.prevLogIndex
 		// reply.ConflictLength is set to the followers last entry
 		if reply.ConflictIndex == -1 && reply.ConflictTerm == -1 {
+			DPrint(rf.me, "sendAppendEntry", "Optimization Case 1; setting nextIndex for server=%d to ConflictLen=%d", server, reply.ConflictLen)
 			rf.mu.Lock()
 			rf.nextIndex[server] = reply.ConflictLen
 			rf.mu.Unlock()
@@ -207,11 +209,13 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 				// Case 2A: reply.ConflictTerm is NOT in logs
 				// set nextIndex to the index where ConflictTerm first
 				// appears in followers log
+				DPrint(rf.me, "sendAppendEntry", "Optimization Case 2A; setting nextIndex for server=%d to ConflictIndex=%d", server, reply.ConflictIndex)
 				rf.nextIndex[server] = reply.ConflictIndex
 			} else {
 				// Case 2B: reply.ConflictTerm is in logs
 				// set nextIndex to the last index where ConflictTerm appears
 				// in the leaders log
+				DPrint(rf.me, "sendAppendEntry", "Optimization Case 2B; setting nextIndex for server=%d to lastIndexOfConflicTerm=%d", server, lastIndexOfConflictTerm)
 				rf.nextIndex[server] = lastIndexOfConflictTerm
 			}
 			rf.mu.Unlock()
