@@ -178,7 +178,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		// convert leader to follower
 		// pass update to isFollower channel
 		if reply.Term > args.LeaderTerm {
-			rf.becomeFollower(reply.Term)
+			rf.becomeFollower(reply.Term, false)
 			isFollower <- true
 			return
 		}
@@ -274,7 +274,7 @@ func (rf *Raft) sendHeartbeat(server int) {
 	// convert to follower
 	if ok && !reply.Success {
 		if reply.Term > args.LeaderTerm {
-			rf.becomeFollower(reply.Term)
+			rf.becomeFollower(reply.Term, false)
 		} else {
 			rf.mu.Lock()
 			rf.nextIndex[server]--

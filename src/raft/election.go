@@ -138,7 +138,7 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 	} else {
 		if reply.Term > args.CandidateTerm {
 			//  Another server is leader: return to follower state
-			rf.becomeFollower(reply.Term)
+			rf.becomeFollower(reply.Term, false)
 			isFollowerChannel <- true
 			return
 		} else if reply.VoteGranted {
@@ -237,14 +237,18 @@ func (rf *Raft) becomeLeader() {
 }
 
 // becomeFollower() method
+// updates rafts state to follower and sets new currentTerm
 // currentTerm int: the most current term
-func (rf *Raft) becomeFollower(currentTerm int) {
+// restartTimer bool: optionally restart time
+func (rf *Raft) becomeFollower(currentTerm int, restartTimer bool) {
 	DPrint(rf.me, "becomeFollower", "is now follower")
 	rf.mu.Lock()
-	rf.lastHeardFromLeader = time.Now()
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = currentTerm
+	if restartTimer {
+		rf.lastHeardFromLeader = time.Now()
+	}
 	rf.mu.Unlock()
 
 	rf.persist()
