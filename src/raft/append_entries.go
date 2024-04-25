@@ -183,46 +183,49 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			return
 		}
 
-		// Optimized handling for finding where leader and follower logs match
-		//
-		// Case 1: follower does not have an entry at args.prevLogIndex
-		// reply.ConflictLength is set to the followers last entry
-		if reply.ConflictIndex == -1 && reply.ConflictTerm == -1 {
-			DPrint(rf.me, "sendAppendEntry", "Optimization Case 1; setting nextIndex for server=%d to ConflictLen=%d", server, reply.ConflictLen)
-			rf.mu.Lock()
-			rf.nextIndex[server] = reply.ConflictLen
-			rf.mu.Unlock()
-		} else {
-			// Case 2: followers log contains entry at args.prevLogIndex
-			// but conflict on the term.
-			//
-			// we need to now check if reply.ConflictTerm is in logs and
-			// if it is we need the last (right most) index of an entry with Term=reply.ConflictTerm
-
-			rf.mu.Lock()
-			lastIndexOfConflictTerm := len(rf.logs)
-			for lastIndexOfConflictTerm > 1 && rf.logs[lastIndexOfConflictTerm-1].Term != reply.ConflictTerm {
-				lastIndexOfConflictTerm--
-			}
-
-			if lastIndexOfConflictTerm == 0 {
-				// Case 2A: reply.ConflictTerm is NOT in logs
-				// set nextIndex to the index where ConflictTerm first
-				// appears in followers log
-				DPrint(rf.me, "sendAppendEntry", "Optimization Case 2A; setting nextIndex for server=%d to ConflictIndex=%d", server, reply.ConflictIndex)
-				rf.nextIndex[server] = reply.ConflictIndex
-			} else {
-				// Case 2B: reply.ConflictTerm is in logs
-				// set nextIndex to the last index where ConflictTerm appears
-				// in the leaders log
-				DPrint(rf.me, "sendAppendEntry", "Optimization Case 2B; setting nextIndex for server=%d to lastIndexOfConflicTerm=%d", server, lastIndexOfConflictTerm)
-				rf.nextIndex[server] = lastIndexOfConflictTerm
-			}
-			rf.mu.Unlock()
-		}
-
+		rf.findNextIndex(server, reply.ConflictIndex, reply.ConflictTerm, reply.ConflictLen)
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// findNextIndex method: leader only
+// Optimized handling for finding where leader and follower logs match
+func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, conflictLen int) {
+	// Case 1: follower does not have an entry at args.prevLogIndex
+	// reply.ConflictLength is set to the followers last entry
+	if conflictIndex == -1 && conflictTerm == -1 {
+		DPrint(rf.me, "sendAppendEntry", "Optimization Case 1; setting nextIndex for server=%d to ConflictLen=%d", server, conflictLen)
+		rf.mu.Lock()
+		rf.nextIndex[server] = conflictLen
+		rf.mu.Unlock()
+		return
+	}
+
+	// Case 2: followers log contains entry at args.prevLogIndex
+	// but conflict on the term.
+	//
+	// we need to now check if reply.ConflictTerm is in logs and
+	// if it is we need the last (right most) index of an entry with Term=reply.ConflictTerm
+	rf.mu.Lock()
+	lastIndexOfConflictTerm := len(rf.logs)
+	for lastIndexOfConflictTerm > 1 && rf.logs[lastIndexOfConflictTerm-1].Term != conflictTerm {
+		lastIndexOfConflictTerm--
+	}
+
+	if lastIndexOfConflictTerm == 0 {
+		// Case 2A: reply.ConflictTerm is NOT in logs
+		// set nextIndex to the index where ConflictTerm first
+		// appears in followers log
+		DPrint(rf.me, "sendAppendEntry", "Optimization Case 2A; setting nextIndex for server=%d to ConflictIndex=%d", server, conflictIndex)
+		rf.nextIndex[server] = conflictIndex
+	} else {
+		// Case 2B: reply.ConflictTerm is in logs
+		// set nextIndex to the last index where ConflictTerm appears
+		// in the leaders log
+		DPrint(rf.me, "sendAppendEntry", "Optimization Case 2B; setting nextIndex for server=%d to lastIndexOfConflicTerm=%d", server, lastIndexOfConflictTerm)
+		rf.nextIndex[server] = lastIndexOfConflictTerm
+	}
+	rf.mu.Unlock()
 }
 
 // sendLogEntries: leader method
@@ -276,6 +279,7 @@ func (rf *Raft) sendHeartbeat(server int) {
 		if reply.Term > args.LeaderTerm {
 			rf.becomeFollower(reply.Term, false)
 		} else {
+			// TODO: need updated logic for optimized handling
 			rf.mu.Lock()
 			rf.nextIndex[server]--
 			rf.mu.Unlock()
