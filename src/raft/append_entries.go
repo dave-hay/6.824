@@ -76,6 +76,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.LeaderPrevLogIndex > len(rf.logs) {
 		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); leader=%d", args.LeaderPrevLogIndex, len(rf.logs), leader)
 		reply.Success = false
+		reply.ConflictTerm = -1
+		reply.ConflictIndex = -1
+		// bypass the iterative approach to conflicts
+		// next prevLogIndex will be len(rf.logs)
+		reply.ConflictLen = len(rf.logs)
 		rf.mu.Unlock()
 		rf.persist()
 		return
@@ -85,11 +90,22 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// reply false and delete all existing entries from prevLogIndex forward
 	// If an existing entry conflicts with a new one (same index but different terms),
 	// delete the existing entry and all that follow it (§5.3)
-	if args.LeaderPrevLogIndex != 0 && args.LeaderPrevLogIndex <= len(rf.logs) &&
-		args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex-1].Term {
+	if args.LeaderPrevLogIndex != 0 && args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex-1].Term {
 		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogTerm (%d) != rf.logs[%d - 1].Term (%d); currentTerm=%d leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, rf.logs[args.LeaderPrevLogIndex-1].Term, rf.currentTerm, leader)
-		rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
-		// TODO: Persist
+		reply.ConflictTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
+		// find left most index of ConflictTerm
+		curIndex := 1
+
+		// term has to appear at some point
+		for rf.logs[curIndex-1].Term != reply.ConflictTerm {
+			curIndex++
+		}
+
+		// Truncate logs from ConflictTerm
+		// rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
+		rf.logs = rf.logs[:curIndex]
+
+		reply.ConflictIndex = curIndex
 		reply.Success = false
 		rf.mu.Unlock()
 		rf.persist()
