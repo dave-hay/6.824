@@ -182,11 +182,40 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			return
 		}
 
-		// unsuccessful so nextIndex is too high;
-		// must decrement
-		rf.mu.Lock()
-		rf.nextIndex[server]--
-		rf.mu.Unlock()
+		// Optimized handling for finding where leader and follower logs match
+		//
+		// Case 1: follower does not have an entry at args.prevLogIndex
+		// reply.ConflictLength is set to the followers last entry
+		if reply.ConflictIndex == -1 && reply.ConflictTerm == -1 {
+			rf.mu.Lock()
+			rf.nextIndex[server] = reply.ConflictLen
+			rf.mu.Unlock()
+		} else {
+			// Case 2: followers log contains entry at args.prevLogIndex
+			// but conflict on the term.
+			//
+			// we need to now check if reply.ConflictTerm is in logs and
+			// if it is we need the last (right most) index of an entry with Term=reply.ConflictTerm
+
+			rf.mu.Lock()
+			lastIndexOfConflictTerm := len(rf.logs)
+			for lastIndexOfConflictTerm > 1 && rf.logs[lastIndexOfConflictTerm-1].Term != reply.ConflictTerm {
+				lastIndexOfConflictTerm--
+			}
+
+			if lastIndexOfConflictTerm == 0 {
+				// Case 2A: reply.ConflictTerm is NOT in logs
+				// set nextIndex to the index where ConflictTerm first
+				// appears in followers log
+				rf.nextIndex[server] = reply.ConflictIndex
+			} else {
+				// Case 2B: reply.ConflictTerm is in logs
+				// set nextIndex to the last index where ConflictTerm appears
+				// in the leaders log
+				rf.nextIndex[server] = lastIndexOfConflictTerm
+			}
+			rf.mu.Unlock()
+		}
 
 		time.Sleep(10 * time.Millisecond)
 	}
