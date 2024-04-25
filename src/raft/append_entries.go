@@ -279,10 +279,7 @@ func (rf *Raft) sendHeartbeat(server int) {
 		if reply.Term > args.LeaderTerm {
 			rf.becomeFollower(reply.Term, false)
 		} else {
-			// TODO: need updated logic for optimized handling
-			rf.mu.Lock()
-			rf.nextIndex[server]--
-			rf.mu.Unlock()
+			rf.findNextIndex(server, reply.ConflictIndex, reply.ConflictTerm, reply.ConflictLen)
 		}
 	}
 }
