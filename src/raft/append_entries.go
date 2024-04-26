@@ -193,13 +193,13 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 // findNextIndex method: leader only
 // Optimized handling for finding where leader and follower logs match
 func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, conflictLen int) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	// Case 1: follower does not have an entry at args.prevLogIndex
 	// reply.ConflictLength is set to the followers last entry
 	if conflictIndex == -1 && conflictTerm == -1 {
 		DPrint(rf.me, "findNextIndex", "Optimization Case 1; setting nextIndex for server=%d to ConflictLen=%d", server, conflictLen)
-		rf.mu.Lock()
 		rf.nextIndex[server] = conflictLen
-		rf.mu.Unlock()
 		return
 	}
 
@@ -208,7 +208,6 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 	//
 	// we need to now check if reply.ConflictTerm is in logs and
 	// if it is we need the last (right most) index of an entry with Term=reply.ConflictTerm
-	rf.mu.Lock()
 	lastIndexOfConflictTerm := len(rf.logs)
 	for lastIndexOfConflictTerm > 1 && rf.logs[lastIndexOfConflictTerm-1].Term != conflictTerm {
 		lastIndexOfConflictTerm--
@@ -227,7 +226,6 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 		DPrint(rf.me, "findNextIndex", "Optimization Case 2B; setting nextIndex for server=%d to lastIndexOfConflicTerm=%d", server, lastIndexOfConflictTerm)
 		rf.nextIndex[server] = lastIndexOfConflictTerm
 	}
-	rf.mu.Unlock()
 }
 
 // sendLogEntries: leader method
