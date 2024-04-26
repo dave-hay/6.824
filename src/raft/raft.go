@@ -342,6 +342,10 @@ func (rf *Raft) readPersist(data []byte) {
 func (rf *Raft) Kill() {
 	atomic.StoreInt32(&rf.dead, 1)
 	// Your code here, if desired.
+	rf.mu.Lock()
+	curTerm := rf.currentTerm
+	rf.mu.Unlock()
+	rf.becomeFollower(curTerm, false)
 }
 
 // You may want to call in all loops, to avoid having dead Raft
