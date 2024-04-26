@@ -76,7 +76,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// decrement nextIndex
 	if args.LeaderPrevLogIndex > len(rf.logs) {
-		// DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); leader=%d", args.LeaderPrevLogIndex, len(rf.logs), leader)
+		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); leader=%d", args.LeaderPrevLogIndex, len(rf.logs), leader)
 		reply.Success = false
 		reply.ConflictTerm = -1
 		reply.ConflictIndex = -1
@@ -157,7 +157,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
 
 		// if there is an error retry the reqeuest
-		if !ok {
+		if !ok || rf.getState() != Leader {
 			continue
 		}
 
@@ -195,6 +195,9 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 // all conflict arguements refer to follower
 // conflictIndex: index of conflict; conflictTerm int: term of conflictIndex; conflictLen: length of followers logs;
 func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, conflictLen int) {
+	if rf.getState() != Leader {
+		return
+	}
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	// Case 1: follower does not have an entry at args.prevLogIndex
@@ -236,6 +239,9 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 // in-memory. the leader then updates it's commitIndex and processes logs
 // up to that new commitIndex. if leader is a follower it will be updated.
 func (rf *Raft) sendLogEntries() {
+	if rf.getState() != Leader {
+		return
+	}
 	peerCount := len(rf.peers)
 	replicationCount := 0
 	replicationsNeeded := (peerCount / 2)
@@ -269,6 +275,9 @@ func (rf *Raft) sendLogEntries() {
 // sendHeartbeat method: sends single heartbeat
 // server (int) defines serverId RPC is for
 func (rf *Raft) sendHeartbeat(server int) {
+	if rf.getState() != Leader {
+		return
+	}
 	args := rf.makeAppendEntriesArgs(server)
 	reply := &AppendEntriesReply{}
 

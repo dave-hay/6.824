@@ -184,7 +184,6 @@ func (rf *Raft) startElection() {
 			// Outcome 1: elected to leader
 			if voteCount >= votesNeeded {
 				rf.becomeLeader()
-				go rf.sendHeartbeats()
 				return
 			}
 		case <-isFollowerChannel:
@@ -232,6 +231,7 @@ func (rf *Raft) becomeLeader() {
 	rf.nextIndex = newNextIndex
 	rf.matchIndex = newMatchIndex
 	rf.mu.Unlock()
+	go rf.sendHeartbeats()
 	rf.persist()
 }
 
