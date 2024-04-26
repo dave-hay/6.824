@@ -137,13 +137,12 @@ func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 //
 // TODO: garbage collect old logs before index as they have been replicated
 // - this requires some readjustment of indicies. maybe updating matchIndex to -1?
-func (rf *Raft) calculateCommitIndex() {
+func (rf *Raft) calculateCommitIndex() int {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	peerCount := len(rf.peers)
 	s := make([]int, 0, peerCount)
 	s = append(s, len(rf.logs))
-
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	DPrint(rf.me, "calculateCommitIndex", "called")
 	for i := range peerCount {
@@ -160,6 +159,7 @@ func (rf *Raft) calculateCommitIndex() {
 		DPrint(rf.me, "calculateCommitIndex", "updated commitIndex=%d", index)
 		rf.commitIndex = index
 	}
+	return rf.commitIndex
 }
 
 // leaderLoop: send heartbeats

@@ -179,8 +179,9 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 			rf.matchIndex[server] = args.LeaderPrevLogIndex + len(arr)
 			rf.nextIndex[server] = args.LeaderPrevLogIndex + len(arr) + 1
 			rf.mu.Unlock()
-			rf.calculateCommitIndex()
-			go rf.logQueueProducer(rf.commitIndex)
+
+			cIndex := rf.calculateCommitIndex()
+			go rf.logQueueProducer(cIndex)
 			replicationChan <- 1
 			return
 		}
