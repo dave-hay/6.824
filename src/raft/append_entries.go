@@ -17,6 +17,7 @@ type AppendEntriesReply struct {
 	ConflictTerm  int
 	ConflictIndex int
 	ConflictLen   int
+	Recieved      bool
 }
 
 // makeAppendEntriesArgs
@@ -53,6 +54,7 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 // for replicating log entries + heartbeats
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
+	reply.Recieved = true
 	logBytes := Decompress(args.LeaderLogEntries)
 	logs := DecodeToLogs(logBytes)
 	leader := args.LeaderId
@@ -155,15 +157,16 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
-		DPrint(rf.me, "sendAppendEntry", "Response AppendEntries; server=%d; reply. Term=%d; Success=%t; ConflictTerm=%d; ConflictIndex=%d; ConflictLen=%d ", server, reply.Term, reply.Success, reply.ConflictTerm, reply.ConflictIndex, reply.ConflictLen)
+		DPrint(rf.me, "sendAppendEntry", "Response AppendEntries; server=%d; reply. Term=%d; Success=%t; ConflictTerm=%d; ConflictIndex=%d; ConflictLen=%d; Recieved=%t", server, reply.Term, reply.Success, reply.ConflictTerm, reply.ConflictIndex, reply.ConflictLen, reply.Recieved)
 
 		if rf.getState() != Leader {
 			return
 		}
 
 		// if there is an error retry the reqeuest
-		if !ok {
+		if !ok || !reply.Recieved {
 			DPrint(rf.me, "sendAppendEntry", "Network Error; server=%d; retrying;", server)
+			time.Sleep(10 * time.Millisecond)
 			continue
 		}
 
