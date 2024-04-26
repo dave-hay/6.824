@@ -159,6 +159,7 @@ func (rf *Raft) startElection() {
 	timeout := rf.getElectionTimeout()
 	rf.lastHeardFromLeader = time.Now()
 	rf.mu.Unlock()
+
 	rf.persist()
 
 	peerCount := len(rf.peers)
@@ -190,18 +191,24 @@ func (rf *Raft) startElection() {
 			voteCount = 0
 			return
 		case <-time.After(timeout):
+			// Outcome 3: repeat election
 			DPrint(rf.me, "startElection", "election timed out")
 			return
 		}
 	}
-
-	// if voteCount >= votesNeeded {
-	// 	rf.becomeLeader()
-	// 	go rf.sendHeartbeats()
-	// 	return
-	// }
-	// Outcome 3: repeat election
 }
+
+// func (rf *Raft) becomeCandidate() {
+// 	rf.mu.Lock()
+// 	DPrint(rf.me, "startElection", "called")
+// 	rf.currentTerm++
+// 	rf.state = Candidate
+// 	timeout := rf.getElectionTimeout()
+// 	rf.lastHeardFromLeader = time.Now()
+// 	rf.mu.Unlock()
+
+// 	rf.persist()
+// }
 
 // becomeLeader() method
 // updates state to reflect Leader
