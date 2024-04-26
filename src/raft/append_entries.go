@@ -190,15 +190,17 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 	}
 }
 
-// findNextIndex method: leader only
-// Optimized handling for finding where leader and follower logs match
+// findNextIndex method: called by leader only;
+// Optimized handling for finding where leader and follower logs match;
+// all conflict arguements refer to follower
+// conflictIndex: index of conflict; conflictTerm int: term of conflictIndex; conflictLen: length of followers logs;
 func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, conflictLen int) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	// Case 1: follower does not have an entry at args.prevLogIndex
 	// reply.ConflictLength is set to the followers last entry
 	if conflictIndex == -1 && conflictTerm == -1 {
-		DPrint(rf.me, "findNextIndex", "Optimization Case 1; setting nextIndex for server=%d to ConflictLen=%d", server, conflictLen)
+		DPrint(rf.me, "findNextIndex", "Optimization Case 1; server=%d; nextIndex was=%d now ConflictLen=%d", server, rf.nextIndex[server], conflictLen)
 		rf.nextIndex[server] = conflictLen
 		return
 	}
@@ -217,13 +219,13 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 		// Case 2A: reply.ConflictTerm is NOT in logs
 		// set nextIndex to the index where ConflictTerm first
 		// appears in followers log
-		DPrint(rf.me, "findNextIndex", "Optimization Case 2A; setting nextIndex for server=%d to ConflictIndex=%d", server, conflictIndex)
+		DPrint(rf.me, "findNextIndex", "Optimization Case 2A; server=%d; nextIndex was=%d now ConflictIndex=%d", server, rf.nextIndex[server], conflictIndex)
 		rf.nextIndex[server] = conflictIndex
 	} else {
 		// Case 2B: reply.ConflictTerm is in logs
 		// set nextIndex to the last index where ConflictTerm appears
 		// in the leaders log
-		DPrint(rf.me, "findNextIndex", "Optimization Case 2B; setting nextIndex for server=%d to lastIndexOfConflicTerm=%d", server, lastIndexOfConflictTerm)
+		DPrint(rf.me, "findNextIndex", "Optimization Case 2B; server=%d; nextIndex was=%d now lastIndexOfConflicTerm=%d", server, rf.nextIndex[server], lastIndexOfConflictTerm)
 		rf.nextIndex[server] = lastIndexOfConflictTerm
 	}
 }
