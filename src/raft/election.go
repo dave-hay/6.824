@@ -84,7 +84,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 		// if logs have last entries with different terms, log w/later term wins (5.4.1)
 		if args.CandidateLastLogTerm > lastLogTerm {
-			DPrint(rf.me, "RequestVote RPC", "Successful; CandidateLastLogTerm=%d > CurLastLogTerm=%d; uid: %s", args.CandidateLastLogTerm, lastLogTerm, uid)
+			DPrint(rf.me, "RequestVote RPC", "Success; CandidateLastLogTerm=%d > CurLastLogTerm=%d; uid: %s", args.CandidateLastLogTerm, lastLogTerm, uid)
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
 			rf.lastHeardFromLeader = time.Now()
@@ -107,15 +107,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	reply.VoteGranted = false
 	rf.mu.Unlock()
-	rf.persist()
-}
-
-func (rf *Raft) voteGranted(candidateId int, reply *RequestVoteReply) {
-	rf.mu.Lock()
-	rf.votedFor = candidateId
-	rf.lastHeardFromLeader = time.Now()
-	rf.mu.Unlock()
-
 	rf.persist()
 }
 
@@ -164,6 +155,7 @@ func (rf *Raft) startElection() {
 	rf.currentTerm++
 	rf.state = Candidate
 	timeout := rf.getElectionTimeout()
+	rf.lastHeardFromLeader = time.Now()
 	rf.mu.Unlock()
 	rf.persist()
 
@@ -218,8 +210,6 @@ func (rf *Raft) becomeLeader() {
 	rf.mu.Lock()
 	rf.state = Leader
 	val := len(rf.logs) + 1 // last log index + 1
-	rf.mu.Unlock()
-	rf.persist()
 
 	peerCount := len(rf.peers)
 	newNextIndex := make([]int, peerCount)
@@ -230,10 +220,10 @@ func (rf *Raft) becomeLeader() {
 		newMatchIndex[i] = -1
 	}
 
-	rf.mu.Lock()
 	rf.nextIndex = newNextIndex
 	rf.matchIndex = newMatchIndex
 	rf.mu.Unlock()
+	rf.persist()
 }
 
 // becomeFollower() method
