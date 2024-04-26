@@ -150,14 +150,20 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		args.LeaderLogEntries = Compress(EncodeToBytes(arr))
 
 		// DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
-		DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; ", server, args.LeaderPrevLogIndex)
+
+		DPrint(rf.me, "sendAppendEntry", "Calling AppendEntries; server=%d; args.LeaderPrevLogIndex: %d; ", server, args.LeaderPrevLogIndex)
 
 		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
-		DPrint(rf.me, "sendAppendEntry", "Recevied Response Raft.AppendEntries RPC for %d; reply: %v", server, reply)
+		DPrint(rf.me, "sendAppendEntry", "Response AppendEntries; server=%d; reply. Term=%d; Success=%t; ConflictTerm=%d; ConflictIndex=%d; ConflictLen=%d ", server, reply.Term, reply.Success, reply.ConflictTerm, reply.ConflictIndex, reply.ConflictLen)
+
+		if rf.getState() != Leader {
+			return
+		}
 
 		// if there is an error retry the reqeuest
-		if !ok || rf.getState() != Leader {
+		if !ok {
+			DPrint(rf.me, "sendAppendEntry", "Network Error; server=%d; retrying;", server)
 			continue
 		}
 
