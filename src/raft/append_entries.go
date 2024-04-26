@@ -34,11 +34,13 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 		LeaderPrevLogTerm:  0,
 	}
 
-	serverPrevLogIndex := rf.nextIndex[server] - 1
+	serverNextLogIndex := rf.nextIndex[server]
 
-	if serverPrevLogIndex != 0 {
-		args.LeaderPrevLogIndex = serverPrevLogIndex
-		args.LeaderPrevLogTerm = rf.logs[serverPrevLogIndex-1].Term
+	// if logIndex=1 then no previous log entries
+	// if logIndex=0 (no logs) then not applicable
+	if serverNextLogIndex > 1 {
+		args.LeaderPrevLogIndex = serverNextLogIndex - 1
+		args.LeaderPrevLogTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
 	}
 
 	args.LeaderLogEntries = Compress(EncodeToBytes(make([]LogEntry, 0)))

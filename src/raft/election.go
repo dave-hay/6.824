@@ -62,6 +62,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.state = Follower
 	}
 
+	// If commitIndex > lastApplied: increment lastApplied,
+	// apply log[lastApplied] to state machine (§5.3)
 	if rf.commitIndex > rf.lastApplied {
 		DPrint(rf.me, "RequestVote RPC", "commitIndex (%d) > lastApplied (%d)", rf.commitIndex, rf.lastApplied)
 		go rf.logQueueProducer(rf.commitIndex)

@@ -46,3 +46,12 @@ func (rf *Raft) sendRequestVote(server, args, reply) bool {
     return ok
 }
 ```
+
+## Test
+
+```bash
+Test (2A): initial election ...
+  ... Passed --   4.0  3   32    9170    0
+```
+
+time in seconds; number of Raft peers; number of RPCs sent; total number of bytes in the RPC messages, number of log entries committed.
