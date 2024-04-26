@@ -196,7 +196,7 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 	// Case 1: follower does not have an entry at args.prevLogIndex
 	// reply.ConflictLength is set to the followers last entry
 	if conflictIndex == -1 && conflictTerm == -1 {
-		DPrint(rf.me, "sendAppendEntry", "Optimization Case 1; setting nextIndex for server=%d to ConflictLen=%d", server, conflictLen)
+		DPrint(rf.me, "findNextIndex", "Optimization Case 1; setting nextIndex for server=%d to ConflictLen=%d", server, conflictLen)
 		rf.mu.Lock()
 		rf.nextIndex[server] = conflictLen
 		rf.mu.Unlock()
@@ -218,13 +218,13 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 		// Case 2A: reply.ConflictTerm is NOT in logs
 		// set nextIndex to the index where ConflictTerm first
 		// appears in followers log
-		DPrint(rf.me, "sendAppendEntry", "Optimization Case 2A; setting nextIndex for server=%d to ConflictIndex=%d", server, conflictIndex)
+		DPrint(rf.me, "findNextIndex", "Optimization Case 2A; setting nextIndex for server=%d to ConflictIndex=%d", server, conflictIndex)
 		rf.nextIndex[server] = conflictIndex
 	} else {
 		// Case 2B: reply.ConflictTerm is in logs
 		// set nextIndex to the last index where ConflictTerm appears
 		// in the leaders log
-		DPrint(rf.me, "sendAppendEntry", "Optimization Case 2B; setting nextIndex for server=%d to lastIndexOfConflicTerm=%d", server, lastIndexOfConflictTerm)
+		DPrint(rf.me, "findNextIndex", "Optimization Case 2B; setting nextIndex for server=%d to lastIndexOfConflicTerm=%d", server, lastIndexOfConflictTerm)
 		rf.nextIndex[server] = lastIndexOfConflictTerm
 	}
 	rf.mu.Unlock()
