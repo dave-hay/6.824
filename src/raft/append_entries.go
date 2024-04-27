@@ -8,6 +8,7 @@ type AppendEntriesArgs struct {
 	LeaderPrevLogIndex int // nextIndex[followerId]
 	LeaderPrevLogTerm  int
 	LeaderLogEntries   []byte
+	LeaderLogEntryLen  int
 	LeaderCommitIndex  int
 }
 
@@ -23,7 +24,7 @@ type AppendEntriesReply struct {
 // makeAppendEntriesArgs
 // uses nextIndex[server] - 1 for prev log index && term
 // doesn't send over all logs just onest that need to be added to save space
-func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
+func (rf *Raft) makeAppendEntriesArgs(server int, isHeartbeat bool) *AppendEntriesArgs {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	args := &AppendEntriesArgs{
@@ -44,7 +45,13 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 		args.LeaderPrevLogTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
 	}
 
-	args.LeaderLogEntries = Compress(EncodeToBytes(make([]LogEntry, 0)))
+	if isHeartbeat {
+		args.LeaderLogEntries = Compress(EncodeToBytes(make([]LogEntry, 0)))
+	} else {
+		arr := rf.logs[args.LeaderPrevLogIndex:]
+		args.LeaderLogEntryLen = len(arr)
+		args.LeaderLogEntries = Compress(EncodeToBytes(arr))
+	}
 
 	return args
 }
@@ -147,9 +154,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		// or else error occurs testing
 		reply := &AppendEntriesReply{}
 
-		args := rf.makeAppendEntriesArgs(server)
-		arr := rf.logs[args.LeaderPrevLogIndex:]
-		args.LeaderLogEntries = Compress(EncodeToBytes(arr))
+		args := rf.makeAppendEntriesArgs(server, false)
 
 		// DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
 
@@ -175,9 +180,9 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		// then pass vote to replication channel
 		if reply.Success {
 			rf.mu.Lock()
-			DPrint(rf.me, "sendAppendEntry", "Updating server=%d match index=%d", server, args.LeaderPrevLogIndex+len(arr))
-			rf.matchIndex[server] = args.LeaderPrevLogIndex + len(arr)
-			rf.nextIndex[server] = args.LeaderPrevLogIndex + len(arr) + 1
+			DPrint(rf.me, "sendAppendEntry", "Updating server=%d match index=%d", server, args.LeaderPrevLogIndex+args.LeaderLogEntryLen)
+			rf.matchIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen
+			rf.nextIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen + 1
 			rf.mu.Unlock()
 
 			cIndex := rf.calculateCommitIndex()
@@ -272,8 +277,8 @@ func (rf *Raft) sendLogEntries() {
 		case outcome := <-replicationChan:
 			replicationCount += outcome
 			if replicationCount >= replicationsNeeded {
-				rf.calculateCommitIndex()
-				go rf.logQueueProducer(rf.commitIndex)
+				// rf.calculateCommitIndex()
+				// go rf.logQueueProducer(rf.commitIndex)
 				return
 			}
 		case <-isFollower:
@@ -288,7 +293,7 @@ func (rf *Raft) sendHeartbeat(server int) {
 	if rf.getState() != Leader {
 		return
 	}
-	args := rf.makeAppendEntriesArgs(server)
+	args := rf.makeAppendEntriesArgs(server, true)
 	reply := &AppendEntriesReply{}
 
 	// DPrint(rf.me, "sendHearbeat", "sending to %d", server)
