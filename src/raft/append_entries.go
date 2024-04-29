@@ -24,7 +24,7 @@ type AppendEntriesReply struct {
 // makeAppendEntriesArgs
 // uses nextIndex[server] - 1 for prev log index && term
 // doesn't send over all logs just onest that need to be added to save space
-func (rf *Raft) makeAppendEntriesArgs(server int, isHeartbeat bool) *AppendEntriesArgs {
+func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	args := &AppendEntriesArgs{
@@ -45,13 +45,9 @@ func (rf *Raft) makeAppendEntriesArgs(server int, isHeartbeat bool) *AppendEntri
 		args.LeaderPrevLogTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
 	}
 
-	if isHeartbeat {
-		args.LeaderLogEntries = Compress(EncodeToBytes(make([]LogEntry, 0)))
-	} else {
-		arr := rf.logs[args.LeaderPrevLogIndex:]
-		args.LeaderLogEntryLen = len(arr)
-		args.LeaderLogEntries = Compress(EncodeToBytes(arr))
-	}
+	arr := rf.logs[args.LeaderPrevLogIndex:]
+	args.LeaderLogEntryLen = len(arr)
+	args.LeaderLogEntries = Compress(EncodeToBytes(arr))
 
 	return args
 }
@@ -154,7 +150,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		// or else error occurs testing
 		reply := &AppendEntriesReply{}
 
-		args := rf.makeAppendEntriesArgs(server, false)
+		args := rf.makeAppendEntriesArgs(server)
 
 		// DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
 
@@ -293,12 +289,10 @@ func (rf *Raft) sendHeartbeat(server int) {
 	if rf.getState() != Leader {
 		return
 	}
-	args := rf.makeAppendEntriesArgs(server, true)
+	args := rf.makeAppendEntriesArgs(server)
 	reply := &AppendEntriesReply{}
 
-	// DPrint(rf.me, "sendHearbeat", "sending to %d", server)
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	// DPrint(rf.me, "sendHearbeat", "recieved from %d", server)
 
 	// convert to follower
 	if ok && !reply.Success {
