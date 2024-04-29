@@ -124,11 +124,15 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
 	// DPrintf("raft %d; sendRequestVote; received reply from %d; votegranted=%t; replyTerm=%d", rf.me, server, reply.VoteGranted, reply.Term)
 
+	rf.mu.Lock()
+	sameTerm := args.CandidateTerm == rf.currentTerm
+	rf.mu.Unlock()
+
 	if !ok {
 		//  !ok means that there was an error and should re-send the request vote
 		voteChannel <- 0
 	} else {
-		if reply.Term > args.CandidateTerm {
+		if reply.Term > args.CandidateTerm || !sameTerm {
 			//  Another server is leader: return to follower state
 			rf.becomeFollower(reply.Term, false)
 			isFollowerChannel <- true
