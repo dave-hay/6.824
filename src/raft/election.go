@@ -48,7 +48,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		rf.mu.Unlock()
-
 		rf.persist()
 		return
 	}
@@ -62,42 +61,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.state = Follower
 	}
 
-	// If commitIndex > lastApplied: increment lastApplied,
-	// apply log[lastApplied] to state machine (§5.3)
-	// if rf.commitIndex > rf.lastApplied {
-	// 	DPrint(rf.me, "RequestVote RPC", "commitIndex (%d) > lastApplied (%d)", rf.commitIndex, rf.lastApplied)
-	// 	go rf.logQueueProducer(rf.commitIndex)
-	// }
-
 	// voter is valid if it has not voted or has already voted for candidate
+	// if log empty then automatically vote for candidate
+	// if logs have last entries with different terms, log w/later term wins (5.4.1)
+	// if logs end with same term, longest log wins (5.4.1)
 	if rf.votedFor == -1 || rf.votedFor == args.CandidateId {
-
-		// if log empty then automatically vote for candidate
-		if len(rf.logs) == 0 {
-			rf.votedFor = args.CandidateId
-			reply.VoteGranted = true
-			rf.lastHeardFromLeader = time.Now()
-			rf.mu.Unlock()
-			rf.persist()
-			return
-		}
-
-		lastLogTerm := rf.logs[len(rf.logs)-1].Term
-
-		// if logs have last entries with different terms, log w/later term wins (5.4.1)
-		if args.CandidateLastLogTerm > lastLogTerm {
-			DPrint(rf.me, "RequestVote RPC", "Success; CandidateLastLogTerm=%d > CurLastLogTerm=%d; uid: %s", args.CandidateLastLogTerm, lastLogTerm, uid)
-			rf.votedFor = args.CandidateId
-			reply.VoteGranted = true
-			rf.lastHeardFromLeader = time.Now()
-			rf.mu.Unlock()
-			rf.persist()
-			return
-		}
-
-		// if logs end with same term, longest log wins (5.4.1)
-		if args.CandidateLastLogTerm == lastLogTerm && args.CandidateLastLogIndex >= len(rf.logs) {
-			DPrint(rf.me, "RequestVote RPC", "Success; Same LogTerm + CandidateLastLogIndex=%d >= CurLastIndex=%d; uid: %s", args.CandidateLastLogIndex, len(rf.logs), uid)
+		if len(rf.logs) == 0 ||
+			args.CandidateLastLogTerm > rf.logs[len(rf.logs)-1].Term ||
+			args.CandidateLastLogTerm == rf.logs[len(rf.logs)-1].Term && args.CandidateLastLogIndex >= len(rf.logs) {
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
 			rf.lastHeardFromLeader = time.Now()
