@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"slices"
 	"time"
 )
 
@@ -30,10 +31,9 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	args := &AppendEntriesArgs{
-		LeaderTerm:        rf.currentTerm,
-		LeaderId:          rf.me,
-		LeaderCommitIndex: rf.commitIndex,
-		// below only necessary for appending logs
+		LeaderTerm:         rf.currentTerm,
+		LeaderId:           rf.me,
+		LeaderCommitIndex:  rf.commitIndex,
 		LeaderPrevLogIndex: 0,
 		LeaderPrevLogTerm:  0,
 	}
@@ -64,11 +64,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	reply.Recieved = true
 	logBytes := Decompress(args.LeaderLogEntries)
 	logs := DecodeToLogs(logBytes)
-	leader := args.LeaderId
 
 	// let leader know it is behind if their term < instances
 	if args.LeaderTerm < rf.currentTerm {
-		// DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; Leader behind follower; leader=%d", leader)
 		reply.Term = rf.currentTerm
 		reply.Success = false
 		return
@@ -85,7 +83,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// decrement nextIndex
 	if args.LeaderPrevLogIndex > len(rf.logs) {
-		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogIndex (%d) > LogIndex (%d); leader=%d", args.LeaderPrevLogIndex, len(rf.logs), leader)
 		reply.Success = false
 		reply.ConflictTerm = -1
 		reply.ConflictIndex = -1
@@ -100,37 +97,29 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// If an existing entry conflicts with a new one (same index but different terms),
 	// delete the existing entry and all that follow it (§5.3)
 	if args.LeaderPrevLogIndex != 0 && len(rf.logs) != 0 && args.LeaderPrevLogTerm != rf.logs[args.LeaderPrevLogIndex-1].Term {
-		DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; LeaderPrevLogTerm (%d) != rf.logs[%d - 1].Term (%d); currentTerm=%d leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, rf.logs[args.LeaderPrevLogIndex-1].Term, rf.currentTerm, leader)
 		reply.ConflictTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
+
 		// find left most index of ConflictTerm
 		curIndex := 1
-
-		// term has to appear at some point
 		for rf.logs[curIndex-1].Term != reply.ConflictTerm {
 			curIndex++
 		}
 
-		// Truncate logs from ConflictTerm
-		// rf.logs = rf.logs[:args.LeaderPrevLogIndex-1]
 		rf.logs = rf.logs[:curIndex]
-
 		reply.ConflictIndex = curIndex
 		reply.Success = false
 		return
 	}
 
 	// append new entries not already in the log
-	// send to consumer
 	if len(logs) != 0 {
 		rf.logs = append(rf.logs[:args.LeaderPrevLogIndex], logs...)
-		// DPrint(rf.me, "AppendEntries RPC", "Success info; LeaderPrevLogTerm=%d; LeaderPrevLogIndex=%d; currentIndex=%d; leader=%d", args.LeaderPrevLogTerm, args.LeaderPrevLogIndex, len(rf.logs), leader)
 	}
 
 	// update commitIndex with highest known log entry
 	if args.LeaderCommitIndex > rf.commitIndex {
 		lastNewEntryIndex := args.LeaderPrevLogIndex + len(logs)
 		rf.commitIndex = min(args.LeaderCommitIndex, lastNewEntryIndex)
-		// DPrint(rf.me, "AppendEntries RPC", "Updated commitIndex=%d; leader=%d", rf.commitIndex, leader)
 	}
 
 	if rf.commitIndex > rf.lastApplied {
@@ -143,20 +132,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // server (int) defines serverId RPC is for
 // TestFailAgree2B
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
-
-	// need to make new params for RPC
-	// or else error occurs testing
 	reply := &AppendEntriesReply{}
-
 	args := rf.makeAppendEntriesArgs(server)
 
-	// DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
-
-	DPrint(rf.me, "sendAppendEntry", "Calling AppendEntries; server=%d; args.LeaderPrevLogIndex: %d; ", server, args.LeaderPrevLogIndex)
-
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-
-	DPrint(rf.me, "sendAppendEntry", "Response AppendEntries; server=%d; reply. Term=%d; Success=%t; ConflictTerm=%d; ConflictIndex=%d; ConflictLen=%d; Recieved=%t", server, reply.Term, reply.Success, reply.ConflictTerm, reply.ConflictIndex, reply.ConflictLen, reply.Recieved)
 
 	if rf.getState() != Leader {
 		return
@@ -164,8 +143,6 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 
 	// if there is an error retry the reqeuest
 	if !ok || !reply.Recieved {
-		DPrint(rf.me, "sendAppendEntry", "Network Error; server=%d;", server)
-		time.Sleep(10 * time.Millisecond)
 		return
 	}
 
@@ -173,14 +150,7 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 	// use prevLogIndex + # logs added if state has changed
 	// then pass vote to replication channel
 	if reply.Success {
-		rf.mu.Lock()
-		DPrint(rf.me, "sendAppendEntry", "Updating server=%d match index=%d", server, args.LeaderPrevLogIndex+args.LeaderLogEntryLen)
-		rf.matchIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen
-		rf.nextIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen + 1
-		rf.mu.Unlock()
-
-		cIndex := rf.calculateCommitIndex()
-		go rf.logQueueProducer(cIndex)
+		rf.updateFollowerState(server, args.LeaderPrevLogIndex, args.LeaderLogEntryLen)
 		replicationChan <- 1
 		return
 	}
@@ -198,11 +168,44 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 	time.Sleep(10 * time.Millisecond)
 }
 
+func (rf *Raft) updateFollowerState(server int, prevLogIndex int, logEntryLen int) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	rf.matchIndex[server] = prevLogIndex + logEntryLen
+	rf.nextIndex[server] = prevLogIndex + logEntryLen + 1
+
+	// once a log has been replicated on a majority of nodes it is considered
+	// committed and the leaders commitIndex can be updated based on the
+	// following rules:
+	//   - a majority of matchIndex[i]'s ≥ N: by picking the middle index in a
+	//     sorted list it implies all to the left are >= that value.
+	//   - newIndex > commitIndex: can't go backwards
+	//   - log[newIndex].term == currentTerm: can't go backwards
+	s := make([]int, 0, rf.peerCount)
+	s = append(s, len(rf.logs))
+
+	for i := range rf.peerCount {
+		if i != rf.me {
+			s = append(s, rf.matchIndex[i])
+		}
+	}
+
+	slices.Sort(s)
+	index := s[rf.peerCount/2]
+
+	if index != -1 && index > rf.commitIndex && rf.logs[index-1].Term == rf.currentTerm {
+		rf.commitIndex = index
+	}
+
+	go rf.logQueueProducer(rf.commitIndex)
+}
+
 // findNextIndex method: called by leader only;
 // Optimized handling for finding where leader and follower logs match;
 // all conflict arguements refer to follower
 // conflictIndex: index of conflict; conflictTerm int: term of conflictIndex; conflictLen: length of followers logs;
-func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, conflictLen int) {
+func (rf *Raft) findNextIndex(server int, cIndex int, cTerm int, cLen int) {
 	if rf.getState() != Leader {
 		return
 	}
@@ -210,9 +213,8 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 	defer rf.mu.Unlock()
 	// Case 1: follower does not have an entry at args.prevLogIndex
 	// reply.ConflictLength is set to the followers last entry
-	if conflictIndex == -1 && conflictTerm == -1 {
-		DPrint(rf.me, "findNextIndex", "Optimization Case 1; server=%d; nextIndex was=%d now ConflictLen=%d", server, rf.nextIndex[server], conflictLen)
-		rf.nextIndex[server] = conflictLen
+	if cIndex == -1 && cTerm == -1 {
+		rf.nextIndex[server] = cLen
 		return
 	}
 
@@ -222,7 +224,7 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 	// we need to now check if reply.ConflictTerm is in logs and
 	// if it is we need the last (right most) index of an entry with Term=reply.ConflictTerm
 	lastIndexOfConflictTerm := len(rf.logs)
-	for lastIndexOfConflictTerm > 1 && rf.logs[lastIndexOfConflictTerm-1].Term != conflictTerm {
+	for lastIndexOfConflictTerm > 1 && rf.logs[lastIndexOfConflictTerm-1].Term != cTerm {
 		lastIndexOfConflictTerm--
 	}
 
@@ -230,13 +232,11 @@ func (rf *Raft) findNextIndex(server int, conflictIndex int, conflictTerm int, c
 		// Case 2A: reply.ConflictTerm is NOT in logs
 		// set nextIndex to the index where ConflictTerm first
 		// appears in followers log
-		DPrint(rf.me, "findNextIndex", "Optimization Case 2A; server=%d; nextIndex was=%d now ConflictIndex=%d", server, rf.nextIndex[server], conflictIndex)
-		rf.nextIndex[server] = conflictIndex
+		rf.nextIndex[server] = cIndex
 	} else {
 		// Case 2B: reply.ConflictTerm is in logs
 		// set nextIndex to the last index where ConflictTerm appears
 		// in the leaders log
-		DPrint(rf.me, "findNextIndex", "Optimization Case 2B; server=%d; nextIndex was=%d now lastIndexOfConflicTerm=%d", server, rf.nextIndex[server], lastIndexOfConflictTerm)
 		rf.nextIndex[server] = lastIndexOfConflictTerm
 	}
 }
@@ -252,26 +252,22 @@ func (rf *Raft) sendLogEntries() {
 	}
 	// numGoroutines := runtime.NumGoroutine()
 	// fmt.Printf("Number of Running Goroutines: %d\n", numGoroutines)
-	peerCount := len(rf.peers)
-	replicationCount := 0
-	replicationsNeeded := (peerCount / 2)
-	replicationChan := make(chan int, peerCount-1)
-	isFollower := make(chan bool, peerCount-1)
+	replicationCount := 1
+	replicationChan := make(chan int, rf.peerCount-1)
+	isFollower := make(chan bool, rf.peerCount-1)
 
-	DPrint(rf.me, "sendLogEntries", "called; replicationsNeeded: %d; peers: %v", replicationsNeeded, rf.peers)
-
-	for serverId := range peerCount {
+	for serverId := range rf.peerCount {
 		if serverId != rf.me {
 			go rf.sendAppendEntry(serverId, replicationChan, isFollower)
 		}
 	}
 
-	for range peerCount - 1 {
+	for range rf.peerCount - 1 {
 		select {
 		// determine quorum of logs sent to finalize commit
 		case outcome := <-replicationChan:
 			replicationCount += outcome
-			if replicationCount >= replicationsNeeded {
+			if replicationCount >= (rf.peerCount/2)+1 {
 				// rf.calculateCommitIndex()
 				// go rf.logQueueProducer(rf.commitIndex)
 				return

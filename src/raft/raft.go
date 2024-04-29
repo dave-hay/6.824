@@ -20,7 +20,6 @@ package raft
 import (
 	"bytes"
 	"log"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -119,42 +118,6 @@ func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 	return rf.lastHeardFromLeader
 }
 
-// calculateCommitIndex: Leader Only
-// once a log has been replicated on a majority of nodes it is considered
-// committed and the leaders commitIndex can be updated based on the
-// following rules:
-//   - a majority of matchIndex[i]'s ≥ N: by picking the middle index in a
-//     sorted list it implies all to the left are >= that value.
-//   - newIndex > commitIndex: can't go backwards
-//   - log[newIndex].term == currentTerm: can't go backwards
-//
-// TODO: garbage collect old logs before index as they have been replicated
-// - this requires some readjustment of indicies. maybe updating matchIndex to -1?
-func (rf *Raft) calculateCommitIndex() int {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	peerCount := len(rf.peers)
-	s := make([]int, 0, peerCount)
-	s = append(s, len(rf.logs))
-
-	DPrint(rf.me, "calculateCommitIndex", "called")
-	for i := range peerCount {
-		if i != rf.me {
-			s = append(s, rf.matchIndex[i])
-		}
-	}
-
-	slices.Sort(s)
-	index := s[peerCount/2]
-	DPrint(rf.me, "calculateCommitIndex", "new commitIndex=%d; all matchIndexes=%v", index, s)
-
-	if index != -1 && index > rf.commitIndex && rf.logs[index-1].Term == rf.currentTerm {
-		DPrint(rf.me, "calculateCommitIndex", "updated commitIndex=%d", index)
-		rf.commitIndex = index
-	}
-	return rf.commitIndex
-}
-
 // leaderLoop: send heartbeats
 func (rf *Raft) leaderLoop() {
 	for !rf.killed() && rf.getState() == Leader {
@@ -245,6 +208,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		commitIndex: 0,
 		lastApplied: 0,
 		applyCh:     applyCh,
+		peerCount:   len(peers),
 		nextIndex:   make([]int, len(peers)),
 		matchIndex:  make([]int, len(peers)),
 	}
