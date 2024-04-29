@@ -166,7 +166,7 @@ func (rf *Raft) calculateCommitIndex() int {
 func (rf *Raft) leaderLoop() {
 	for !rf.killed() && rf.getState() == Leader {
 		time.Sleep(rf.getHeartbeatTimeout())
-		rf.sendHeartbeats()
+		rf.sendLogEntries()
 
 		time.Sleep(10 * time.Millisecond)
 	}

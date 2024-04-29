@@ -280,35 +280,3 @@ func (rf *Raft) sendLogEntries() {
 		}
 	}
 }
-
-// sendHeartbeat method: sends single heartbeat
-// server (int) defines serverId RPC is for
-func (rf *Raft) sendHeartbeat(server int) {
-	if rf.getState() != Leader {
-		return
-	}
-	args := rf.makeAppendEntriesArgs(server)
-	reply := &AppendEntriesReply{}
-
-	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-
-	// convert to follower
-	if ok && !reply.Success {
-		if reply.Term > args.LeaderTerm {
-			rf.becomeFollower(reply.Term, false)
-		} else {
-			rf.findNextIndex(server, reply.ConflictIndex, reply.ConflictTerm, reply.ConflictLen)
-		}
-	}
-}
-
-// sendHeartbeats method
-// triggered by leader sending empty AppendEntries RPCs to followers
-func (rf *Raft) sendHeartbeats() {
-	// DPrint(rf.me, "sendHearbeatS", "isLeader=%t", rf.getState() == Leader)
-	for serverId := range len(rf.peers) {
-		if serverId != rf.me {
-			go rf.sendHeartbeat(serverId)
-		}
-	}
-}

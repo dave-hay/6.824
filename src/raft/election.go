@@ -231,7 +231,7 @@ func (rf *Raft) becomeLeader() {
 	rf.nextIndex = newNextIndex
 	rf.matchIndex = newMatchIndex
 	rf.mu.Unlock()
-	go rf.sendHeartbeats()
+	go rf.sendLogEntries()
 	rf.persist()
 }
 
