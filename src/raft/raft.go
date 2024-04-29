@@ -217,24 +217,16 @@ func (rf *Raft) mainLoop() {
 // term (int): current term
 // isLeader (bool): if server is leader
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := false
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
-	if rf.getState() != Leader {
-		// DPrint(rf.me, "Start()", "rejected is not leader")
-		return index, term, isLeader
+	if rf.state != Leader {
+		return -1, -1, false
 	}
 
-	rf.mu.Lock()
-	term = rf.currentTerm
-	isLeader = rf.state == Leader
-	index = len(rf.logs) + 1
-	rf.logs = append(rf.logs, LogEntry{Term: term, Command: command}) // append command to log
-	// DPrint(rf.me, "Start()", "command: %v appended to log; index: %d; logs: %v", command, index, rf.logs)
-	rf.mu.Unlock()
+	rf.logs = append(rf.logs, LogEntry{Term: rf.currentTerm, Command: command}) // append command to log
 
-	return index, term, isLeader
+	return len(rf.logs), rf.currentTerm, true
 }
 
 // the service or tester wants to create a Raft server. the ports
