@@ -72,7 +72,6 @@ type Raft struct {
 	currentTerm int        // latest term server has seen; 0 default
 	votedFor    int        // candidateId recieved vote in cur term; -1 if none
 	logs        []LogEntry // first index 1
-	lastIndex   int
 	// logIndex of len(logs) - 1
 
 	// volatile state
@@ -83,7 +82,6 @@ type Raft struct {
 	applyCh             chan ApplyMsg
 	lastHeardFromLeader time.Time
 	logQueue            LogQueue
-	newLogQ             NewLogQueue
 
 	// leader only, volatile state
 	// contains information about follower servers
@@ -236,9 +234,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	// DPrint(rf.me, "Start()", "command: %v appended to log; index: %d; logs: %v", command, index, rf.logs)
 	rf.mu.Unlock()
 
-	// fire off AppendEntries
-	go rf.newLogProducer()
-
 	return index, term, isLeader
 }
 
@@ -265,12 +260,10 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		applyCh:     applyCh,
 	}
 	rf.logQueue.cond = sync.NewCond(&sync.Mutex{})
-	rf.newLogQ.cond = sync.NewCond(&sync.Mutex{})
 
 	// Your initialization code here (2A, 2B, 2C).
 	go rf.mainLoop()
 	go rf.logQueueConsumer()
-	go rf.newLogConsumer()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())

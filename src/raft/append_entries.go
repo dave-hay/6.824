@@ -1,6 +1,8 @@
 package raft
 
-import "time"
+import (
+	"time"
+)
 
 type AppendEntriesArgs struct {
 	LeaderTerm         int
@@ -251,6 +253,8 @@ func (rf *Raft) sendLogEntries() {
 	if rf.getState() != Leader {
 		return
 	}
+	// numGoroutines := runtime.NumGoroutine()
+	// fmt.Printf("Number of Running Goroutines: %d\n", numGoroutines)
 	peerCount := len(rf.peers)
 	replicationCount := 0
 	replicationsNeeded := (peerCount / 2)
