@@ -63,27 +63,28 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChannel chan bool, args *RequestVoteArgs) {
 	reply := &RequestVoteReply{}
 
-	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+	if ok := rf.peers[server].Call("Raft.RequestVote", args, reply); !ok {
+		voteChannel <- 0
+		return
+	}
+
+	if reply.VoteGranted {
+		voteChannel <- 1
+		return
+	}
 
 	rf.mu.Lock()
 	sameTerm := args.CandidateTerm == rf.currentTerm
 	rf.mu.Unlock()
 
-	if !ok {
-		voteChannel <- 0
-	} else {
-		if reply.Term > args.CandidateTerm || !sameTerm {
-			//  Another server is leader: return to follower state
-			rf.becomeFollower(reply.Term, false)
-			isFollowerChannel <- true
-			return
-		} else if reply.VoteGranted {
-			voteChannel <- 1
-		} else {
-			voteChannel <- 0
-		}
+	if reply.Term > args.CandidateTerm || !sameTerm {
+		//  Another server is leader: return to follower state
+		rf.becomeFollower(reply.Term, false)
+		isFollowerChannel <- true
+		return
 	}
 
+	voteChannel <- 0
 }
 
 // startElection method
