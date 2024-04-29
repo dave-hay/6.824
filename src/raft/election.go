@@ -23,13 +23,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	defer rf.mu.Unlock()
 	defer rf.persist()
 
-	uid := generateUID()
-
-	DPrint(rf.me, "RequestVote RPC", "Raft: %d requested vote; uid: %s", args.CandidateId, uid)
-
 	// if candidates term < voters term; candidate becomes follower
 	if args.CandidateTerm < rf.currentTerm {
-		DPrint(rf.me, "RequestVote RPC", "Voter has larger term; uid: %s", uid)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
@@ -58,8 +53,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			return
 		}
 	}
-
-	reply.VoteGranted = false
 }
 
 // leaders must check that the term hasn't changed since sending the RPC
