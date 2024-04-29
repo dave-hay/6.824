@@ -64,10 +64,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	// If commitIndex > lastApplied: increment lastApplied,
 	// apply log[lastApplied] to state machine (§5.3)
-	if rf.commitIndex > rf.lastApplied {
-		DPrint(rf.me, "RequestVote RPC", "commitIndex (%d) > lastApplied (%d)", rf.commitIndex, rf.lastApplied)
-		go rf.logQueueProducer(rf.commitIndex)
-	}
+	// if rf.commitIndex > rf.lastApplied {
+	// 	DPrint(rf.me, "RequestVote RPC", "commitIndex (%d) > lastApplied (%d)", rf.commitIndex, rf.lastApplied)
+	// 	go rf.logQueueProducer(rf.commitIndex)
+	// }
 
 	// voter is valid if it has not voted or has already voted for candidate
 	if rf.votedFor == -1 || rf.votedFor == args.CandidateId {
@@ -117,8 +117,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 // sendRequestVote method
 // called by candidates during election to request a vote from a Raft instance
-func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChannel chan bool) {
-	args := rf.makeRequestVoteArgs()
+func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChannel chan bool, args *RequestVoteArgs) {
 	reply := &RequestVoteReply{}
 
 	// DPrintf("raft %d; sendRequestVote; sending to %d", rf.me, server)
@@ -169,11 +168,12 @@ func (rf *Raft) startElection() {
 
 	voteChannel := make(chan int, peerCount-1)
 	isFollowerChannel := make(chan bool, peerCount-1)
+	args := rf.makeRequestVoteArgs()
 
 	// issues `RequestVote RPCs` in parallel
 	for server := range peerCount {
 		if server != instanceId {
-			go rf.sendRequestVote(server, voteChannel, isFollowerChannel)
+			go rf.sendRequestVote(server, voteChannel, isFollowerChannel, args)
 		}
 	}
 
