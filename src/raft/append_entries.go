@@ -145,60 +145,58 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // TestFailAgree2B
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
 
-	for !rf.killed() && rf.getState() == Leader {
-		// need to make new params for RPC
-		// or else error occurs testing
-		reply := &AppendEntriesReply{}
+	// need to make new params for RPC
+	// or else error occurs testing
+	reply := &AppendEntriesReply{}
 
-		args := rf.makeAppendEntriesArgs(server)
+	args := rf.makeAppendEntriesArgs(server)
 
-		// DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
+	// DPrint(rf.me, "sendAppendEntry", "called for server %d; args.LeaderPrevLogIndex: %d; appending log: %v; logs: %v", server, args.LeaderPrevLogIndex, arr, rf.logs)
 
-		DPrint(rf.me, "sendAppendEntry", "Calling AppendEntries; server=%d; args.LeaderPrevLogIndex: %d; ", server, args.LeaderPrevLogIndex)
+	DPrint(rf.me, "sendAppendEntry", "Calling AppendEntries; server=%d; args.LeaderPrevLogIndex: %d; ", server, args.LeaderPrevLogIndex)
 
-		ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
-		DPrint(rf.me, "sendAppendEntry", "Response AppendEntries; server=%d; reply. Term=%d; Success=%t; ConflictTerm=%d; ConflictIndex=%d; ConflictLen=%d; Recieved=%t", server, reply.Term, reply.Success, reply.ConflictTerm, reply.ConflictIndex, reply.ConflictLen, reply.Recieved)
+	DPrint(rf.me, "sendAppendEntry", "Response AppendEntries; server=%d; reply. Term=%d; Success=%t; ConflictTerm=%d; ConflictIndex=%d; ConflictLen=%d; Recieved=%t", server, reply.Term, reply.Success, reply.ConflictTerm, reply.ConflictIndex, reply.ConflictLen, reply.Recieved)
 
-		if rf.getState() != Leader {
-			return
-		}
-
-		// if there is an error retry the reqeuest
-		if !ok || !reply.Recieved {
-			DPrint(rf.me, "sendAppendEntry", "Network Error; server=%d; retrying;", server)
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
-
-		// if success, update servers matchIndex and nextIndex
-		// use prevLogIndex + # logs added if state has changed
-		// then pass vote to replication channel
-		if reply.Success {
-			rf.mu.Lock()
-			DPrint(rf.me, "sendAppendEntry", "Updating server=%d match index=%d", server, args.LeaderPrevLogIndex+args.LeaderLogEntryLen)
-			rf.matchIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen
-			rf.nextIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen + 1
-			rf.mu.Unlock()
-
-			cIndex := rf.calculateCommitIndex()
-			go rf.logQueueProducer(cIndex)
-			replicationChan <- 1
-			return
-		}
-
-		// the follower has a higher term
-		// convert leader to follower
-		// pass update to isFollower channel
-		if reply.Term > args.LeaderTerm {
-			rf.becomeFollower(reply.Term, false)
-			isFollower <- true
-			return
-		}
-
-		rf.findNextIndex(server, reply.ConflictIndex, reply.ConflictTerm, reply.ConflictLen)
-		time.Sleep(10 * time.Millisecond)
+	if rf.getState() != Leader {
+		return
 	}
+
+	// if there is an error retry the reqeuest
+	if !ok || !reply.Recieved {
+		DPrint(rf.me, "sendAppendEntry", "Network Error; server=%d;", server)
+		time.Sleep(10 * time.Millisecond)
+		return
+	}
+
+	// if success, update servers matchIndex and nextIndex
+	// use prevLogIndex + # logs added if state has changed
+	// then pass vote to replication channel
+	if reply.Success {
+		rf.mu.Lock()
+		DPrint(rf.me, "sendAppendEntry", "Updating server=%d match index=%d", server, args.LeaderPrevLogIndex+args.LeaderLogEntryLen)
+		rf.matchIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen
+		rf.nextIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen + 1
+		rf.mu.Unlock()
+
+		cIndex := rf.calculateCommitIndex()
+		go rf.logQueueProducer(cIndex)
+		replicationChan <- 1
+		return
+	}
+
+	// the follower has a higher term
+	// convert leader to follower
+	// pass update to isFollower channel
+	if reply.Term > args.LeaderTerm {
+		rf.becomeFollower(reply.Term, false)
+		isFollower <- true
+		return
+	}
+
+	rf.findNextIndex(server, reply.ConflictIndex, reply.ConflictTerm, reply.ConflictLen)
+	time.Sleep(10 * time.Millisecond)
 }
 
 // findNextIndex method: called by leader only;
