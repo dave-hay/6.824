@@ -38,6 +38,9 @@ func (rf *Raft) makeRequestVoteArgs() *RequestVoteArgs {
 // voter denies its vote if its own log is more up-to-date than that of the candidate.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	defer rf.persist()
+
 	uid := generateUID()
 
 	DPrint(rf.me, "RequestVote RPC", "Raft: %d requested vote; uid: %s", args.CandidateId, uid)
@@ -47,8 +50,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		DPrint(rf.me, "RequestVote RPC", "Voter has larger term; uid: %s", uid)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
-		rf.mu.Unlock()
-		rf.persist()
 		return
 	}
 
@@ -72,15 +73,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 			rf.votedFor = args.CandidateId
 			reply.VoteGranted = true
 			rf.lastHeardFromLeader = time.Now()
-			rf.mu.Unlock()
-			rf.persist()
 			return
 		}
 	}
 
 	reply.VoteGranted = false
-	rf.mu.Unlock()
-	rf.persist()
 }
 
 // leaders must check that the term hasn't changed since sending the RPC
@@ -100,7 +97,6 @@ func (rf *Raft) sendRequestVote(server int, voteChannel chan int, isFollowerChan
 	rf.mu.Unlock()
 
 	if !ok {
-		//  !ok means that there was an error and should re-send the request vote
 		voteChannel <- 0
 	} else {
 		if reply.Term > args.CandidateTerm || !sameTerm {
@@ -132,9 +128,8 @@ func (rf *Raft) startElection() {
 	rf.state = Candidate
 	timeout := rf.getElectionTimeout()
 	rf.lastHeardFromLeader = time.Now()
-	rf.mu.Unlock()
-
 	rf.persist()
+	rf.mu.Unlock()
 
 	peerCount := len(rf.peers)
 	instanceId := rf.me
@@ -172,18 +167,6 @@ func (rf *Raft) startElection() {
 	}
 }
 
-// func (rf *Raft) becomeCandidate() {
-// 	rf.mu.Lock()
-// 	DPrint(rf.me, "startElection", "called")
-// 	rf.currentTerm++
-// 	rf.state = Candidate
-// 	timeout := rf.getElectionTimeout()
-// 	rf.lastHeardFromLeader = time.Now()
-// 	rf.mu.Unlock()
-
-// 	rf.persist()
-// }
-
 // becomeLeader() method
 // updates state to reflect Leader
 // initializes the new nextIndex[] array
@@ -205,9 +188,9 @@ func (rf *Raft) becomeLeader() {
 
 	rf.nextIndex = newNextIndex
 	rf.matchIndex = newMatchIndex
+	rf.persist()
 	rf.mu.Unlock()
 	go rf.sendLogEntries()
-	rf.persist()
 }
 
 // becomeFollower() method
@@ -217,13 +200,13 @@ func (rf *Raft) becomeLeader() {
 func (rf *Raft) becomeFollower(currentTerm int, restartTimer bool) {
 	DPrint(rf.me, "becomeFollower", "is now follower")
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	defer rf.persist()
+
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = currentTerm
 	if restartTimer {
 		rf.lastHeardFromLeader = time.Now()
 	}
-	rf.mu.Unlock()
-
-	rf.persist()
 }

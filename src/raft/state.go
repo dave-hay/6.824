@@ -18,8 +18,8 @@ func (rf *Raft) logQueueProducer(index int) {
 
 	rf.mu.Lock()
 	prevIndex := rf.lastApplied
-	rf.mu.Unlock()
 	rf.persist()
+	rf.mu.Unlock()
 
 	for i := prevIndex + 1; i <= index; i++ {
 		rf.logQueue.indexes = append(

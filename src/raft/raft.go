@@ -287,13 +287,11 @@ func (rf *Raft) persist() {
 	// Example:
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
-	rf.mu.Lock()
 	e.Encode(PersistentState{
 		CurrentTerm: rf.currentTerm,
 		VotedFor:    rf.votedFor,
 		Logs:        rf.logs,
 	})
-	rf.mu.Unlock()
 	data := w.Bytes()
 	rf.persister.SaveRaftState(data)
 	DPrint(rf.me, "persist", "Success")

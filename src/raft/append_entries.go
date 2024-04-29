@@ -59,6 +59,8 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 // for replicating log entries + heartbeats
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	reply.Recieved = true
 	logBytes := Decompress(args.LeaderLogEntries)
 	logs := DecodeToLogs(logBytes)
@@ -69,10 +71,10 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		// DPrint(rf.me, "AppendEntries RPC", "Unsuccessful; Leader behind follower; leader=%d", leader)
 		reply.Term = rf.currentTerm
 		reply.Success = false
-		rf.mu.Unlock()
 		return
 	}
 
+	defer rf.persist()
 	// reset follower so leader keeps authority
 	rf.lastHeardFromLeader = time.Now()
 	rf.votedFor = -1
@@ -90,8 +92,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		// bypass the iterative approach to conflicts
 		// next prevLogIndex will be len(rf.logs)
 		reply.ConflictLen = len(rf.logs)
-		rf.mu.Unlock()
-		rf.persist()
 		return
 	}
 
@@ -116,12 +116,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 		reply.ConflictIndex = curIndex
 		reply.Success = false
-		rf.mu.Unlock()
-		rf.persist()
 		return
 	}
 
-	defer rf.mu.Unlock()
 	// append new entries not already in the log
 	// send to consumer
 	if len(logs) != 0 {
