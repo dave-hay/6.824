@@ -64,6 +64,7 @@ const (
 type Raft struct {
 	mu        sync.Mutex          // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
+	peerCount int                 // total peers
 	persister *Persister          // Object to hold this peer's persisted state
 	me        int                 // this peer's index into peers[]
 	dead      int32               // set by Kill()
@@ -250,6 +251,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		commitIndex: 0,
 		lastApplied: 0,
 		applyCh:     applyCh,
+		nextIndex:   make([]int, len(peers)),
+		matchIndex:  make([]int, len(peers)),
 	}
 	rf.logQueue.cond = sync.NewCond(&sync.Mutex{})
 
