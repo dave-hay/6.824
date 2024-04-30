@@ -166,7 +166,6 @@ func (rf *Raft) becomeLeader() {
 		rf.matchIndex[i] = -1
 	}
 
-	rf.persist()
 	rf.mu.Unlock()
 
 	go rf.sendLogEntries()
@@ -180,7 +179,6 @@ func (rf *Raft) becomeFollower(currentTerm int, restartTimer bool) {
 	DPrint(rf.me, "becomeFollower", "is now follower")
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	defer rf.persist()
 
 	rf.votedFor = -1
 	rf.state = Follower

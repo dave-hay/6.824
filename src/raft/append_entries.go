@@ -123,6 +123,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	if rf.commitIndex > rf.lastApplied {
+		// go rf.applyLogs()
 		go rf.logQueueProducer(rf.commitIndex)
 	}
 }
@@ -198,6 +199,7 @@ func (rf *Raft) updateFollowerState(server int, prevLogIndex int, logEntryLen in
 		rf.commitIndex = index
 	}
 
+	// go rf.applyLogs()
 	go rf.logQueueProducer(rf.commitIndex)
 }
 

@@ -29,7 +29,20 @@ func (rf *Raft) logQueueProducer(index int) {
 	}
 
 	rf.logQueue.cond.Signal()
-	// DPrint(rf.me, "logQueueProducer()", "appended commit at index: %v; indexes: %v", index, rf.logQueue.indexes)
+}
+
+func (rf *Raft) applyLogs() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		msg := ApplyMsg{
+			CommandValid: true,
+			Command:      rf.logs[i-1].Command,
+			CommandIndex: i,
+		}
+		rf.applyCh <- msg
+		rf.lastApplied = i
+	}
 }
 
 // logQueueConsumer
