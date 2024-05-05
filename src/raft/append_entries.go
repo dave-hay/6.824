@@ -116,34 +116,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // sendAppendEntry method: leader only
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
-func (rf *Raft) sendAppendEntry(server int) {
-	rf.mu.Lock()
-
-	reply := &AppendEntriesReply{}
-	args := &AppendEntriesArgs{
-		LeaderTerm:         rf.currentTerm,
-		LeaderId:           rf.me,
-		LeaderCommitIndex:  rf.commitIndex,
-		LeaderPrevLogIndex: 0,
-		LeaderPrevLogTerm:  0,
-	}
-
-	// uses nextIndex[server] - 1 for prev log index && term
-	// doesn't send over all logs just onest that need to be added to save space
-	serverNextLogIndex := rf.nextIndex[server]
-
-	// if logIndex=1 then no previous log entries
-	// if logIndex=0 (no logs) then not applicable
-	if serverNextLogIndex > 1 {
-		args.LeaderPrevLogIndex = serverNextLogIndex - 1
-		args.LeaderPrevLogTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
-	}
-
-	arr := rf.logs[args.LeaderPrevLogIndex:]
-	args.LeaderLogEntryLen = len(arr)
-	args.LeaderLogEntries = Compress(EncodeToBytes(arr))
-	rf.mu.Unlock()
-
+func (rf *Raft) sendAppendEntry(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
 	if rf.getState() != Leader {
@@ -249,9 +222,30 @@ func (rf *Raft) sendLogEntries() {
 		return
 	}
 
+	rf.mu.Lock()
 	for serverId := range rf.peerCount {
 		if serverId != rf.me {
-			go rf.sendAppendEntry(serverId)
+
+			args := &AppendEntriesArgs{
+				LeaderTerm:         rf.currentTerm,
+				LeaderId:           rf.me,
+				LeaderCommitIndex:  rf.commitIndex,
+				LeaderPrevLogIndex: max(rf.nextIndex[serverId]-1, 0),
+				LeaderPrevLogTerm:  0,
+			}
+
+			// ignores situations where no previous logs; either empty or single log
+			if args.LeaderPrevLogIndex > 0 {
+				args.LeaderPrevLogTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
+			}
+
+			arr := rf.logs[args.LeaderPrevLogIndex:]
+			args.LeaderLogEntryLen = len(arr)
+			args.LeaderLogEntries = Compress(EncodeToBytes(arr))
+
+			go rf.sendAppendEntry(serverId, args, &AppendEntriesReply{})
 		}
 	}
+
+	rf.mu.Unlock()
 }
