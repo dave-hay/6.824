@@ -20,6 +20,9 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 }
 
 type Op struct {
+	Method string
+	Key    string
+	Value  string
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
