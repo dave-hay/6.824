@@ -15,6 +15,7 @@ type AppendEntriesArgs struct {
 	LeaderCommitIndex  int
 }
 
+// all conflict arguements refer to follower
 type AppendEntriesReply struct {
 	Term          int
 	Success       bool
@@ -119,99 +120,83 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 func (rf *Raft) sendAppendEntry(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
-	if rf.getState() != Leader {
+	if rf.getState() != Leader || !ok || !reply.Recieved {
 		return
 	}
 
-	if !ok || !reply.Recieved {
-		return
-	}
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	defer rf.persist()
 
 	if reply.Success {
-		rf.updateFollowerState(server, args.LeaderPrevLogIndex, args.LeaderLogEntryLen)
+		rf.matchIndex[server] = args.LeaderPrevLogIndex + args.LeaderLogEntryLen
+		rf.nextIndex[server] = rf.matchIndex[server] + 1
+
+		// once a log has been replicated on a majority of nodes it is considered
+		// committed and the leaders commitIndex can be updated based on the
+		// following rules:
+		//   - a majority of matchIndex[i]'s ≥ N: by picking the middle index in a
+		//     sorted list it implies all to the left are >= that value.
+		//   - newIndex > commitIndex: can't go backwards
+		//   - log[newIndex].term == currentTerm: can't go backwards
+		s := make([]int, 0, rf.peerCount)
+		s = append(s, len(rf.logs))
+
+		for i := range rf.peerCount {
+			if i != rf.me {
+				s = append(s, rf.matchIndex[i])
+			}
+		}
+
+		slices.Sort(s)
+		index := s[rf.peerCount/2]
+
+		if index != -1 && index > rf.commitIndex && rf.logs[index-1].Term == rf.currentTerm {
+			rf.commitIndex = index
+		}
+
+		go rf.applyLogs()
 		return
 	}
 
 	if reply.Term > args.LeaderTerm {
-		rf.becomeFollower(reply.Term, false)
+		rf.votedFor = -1
+		rf.state = Follower
+		rf.currentTerm = reply.Term
 		return
 	}
 
-	rf.findNextIndex(server, reply.ConflictIndex, reply.ConflictTerm, reply.ConflictLen)
-	time.Sleep(10 * time.Millisecond)
-}
-
-func (rf *Raft) updateFollowerState(server int, prevLogIndex int, logEntryLen int) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-
-	rf.matchIndex[server] = prevLogIndex + logEntryLen
-	rf.nextIndex[server] = prevLogIndex + logEntryLen + 1
-
-	// once a log has been replicated on a majority of nodes it is considered
-	// committed and the leaders commitIndex can be updated based on the
-	// following rules:
-	//   - a majority of matchIndex[i]'s ≥ N: by picking the middle index in a
-	//     sorted list it implies all to the left are >= that value.
-	//   - newIndex > commitIndex: can't go backwards
-	//   - log[newIndex].term == currentTerm: can't go backwards
-	s := make([]int, 0, rf.peerCount)
-	s = append(s, len(rf.logs))
-
-	for i := range rf.peerCount {
-		if i != rf.me {
-			s = append(s, rf.matchIndex[i])
-		}
-	}
-
-	slices.Sort(s)
-	index := s[rf.peerCount/2]
-
-	if index != -1 && index > rf.commitIndex && rf.logs[index-1].Term == rf.currentTerm {
-		rf.commitIndex = index
-	}
-
-	go rf.applyLogs()
-}
-
-// findNextIndex method: called by leader only;
-// Optimized handling for finding where leader and follower logs match;
-// all conflict arguements refer to follower
-// conflictIndex: index of conflict; conflictTerm int: term of conflictIndex; conflictLen: length of followers logs;
-func (rf *Raft) findNextIndex(server int, cIndex int, cTerm int, cLen int) {
-	if rf.getState() != Leader {
-		return
-	}
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	// Case 1: follower does not have an entry at args.prevLogIndex
-	// reply.ConflictLength is set to the followers last entry
-	if cIndex == -1 && cTerm == -1 {
-		rf.nextIndex[server] = cLen
-		return
-	}
-
-	// Case 2: followers log contains entry at args.prevLogIndex
-	// but conflict on the term.
+	// Optimized handling for finding where leader and follower logs match;
+	// better than decrementing next index by one each RPC
 	//
-	// we need to now check if reply.ConflictTerm is in logs and
-	// if it is we need the last (right most) index of an entry with Term=reply.ConflictTerm
+	// Case 1:
+	// 	- follower didnt have an entry at prevLogIndex (next index - 1)
+	// 	- set next index to followers length
+	if reply.ConflictIndex == -1 && reply.ConflictTerm == -1 {
+		rf.nextIndex[server] = reply.ConflictLen
+		return
+	}
+
+	// Case 2:
+	// 	- follower has entry at prevLogIndex but term doesnt match with leaders
+	//  - find the last index where the conflict term is in logs
 	lastIndexOfConflictTerm := len(rf.logs)
-	for lastIndexOfConflictTerm > 1 && rf.logs[lastIndexOfConflictTerm-1].Term != cTerm {
+	for lastIndexOfConflictTerm > 1 && rf.logs[lastIndexOfConflictTerm-1].Term != reply.ConflictTerm {
 		lastIndexOfConflictTerm--
 	}
 
 	if lastIndexOfConflictTerm == 0 {
-		// Case 2A: reply.ConflictTerm is NOT in logs
-		// set nextIndex to the index where ConflictTerm first
-		// appears in followers log
-		rf.nextIndex[server] = cIndex
+		// Case 2A:
+		// 	- reply.ConflictTerm is NOT in logs
+		// 	- set nextIndex to the index where ConflictTerm first appears in followers log
+		rf.nextIndex[server] = reply.ConflictIndex
 	} else {
-		// Case 2B: reply.ConflictTerm is in logs
-		// set nextIndex to the last index where ConflictTerm appears
-		// in the leaders log
+		// Case 2B:
+		// 	- reply.ConflictTerm is in logs
+		// 	- set nextIndex to the last index where ConflictTerm appears in the leaders log
 		rf.nextIndex[server] = lastIndexOfConflictTerm
 	}
+	time.Sleep(10 * time.Millisecond)
 }
 
 // sendLogEntries: leader method
