@@ -24,36 +24,6 @@ type AppendEntriesReply struct {
 	Recieved      bool
 }
 
-// makeAppendEntriesArgs
-// uses nextIndex[server] - 1 for prev log index && term
-// doesn't send over all logs just onest that need to be added to save space
-func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	args := &AppendEntriesArgs{
-		LeaderTerm:         rf.currentTerm,
-		LeaderId:           rf.me,
-		LeaderCommitIndex:  rf.commitIndex,
-		LeaderPrevLogIndex: 0,
-		LeaderPrevLogTerm:  0,
-	}
-
-	serverNextLogIndex := rf.nextIndex[server]
-
-	// if logIndex=1 then no previous log entries
-	// if logIndex=0 (no logs) then not applicable
-	if serverNextLogIndex > 1 {
-		args.LeaderPrevLogIndex = serverNextLogIndex - 1
-		args.LeaderPrevLogTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
-	}
-
-	arr := rf.logs[args.LeaderPrevLogIndex:]
-	args.LeaderLogEntryLen = len(arr)
-	args.LeaderLogEntries = Compress(EncodeToBytes(arr))
-
-	return args
-}
-
 func (rf *Raft) applyLogs() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -145,10 +115,32 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // sendAppendEntry method: leader only
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
-// TestFailAgree2B
 func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
+	rf.mu.Lock()
 	reply := &AppendEntriesReply{}
-	args := rf.makeAppendEntriesArgs(server)
+	args := &AppendEntriesArgs{
+		LeaderTerm:         rf.currentTerm,
+		LeaderId:           rf.me,
+		LeaderCommitIndex:  rf.commitIndex,
+		LeaderPrevLogIndex: 0,
+		LeaderPrevLogTerm:  0,
+	}
+
+	// uses nextIndex[server] - 1 for prev log index && term
+	// doesn't send over all logs just onest that need to be added to save space
+	serverNextLogIndex := rf.nextIndex[server]
+
+	// if logIndex=1 then no previous log entries
+	// if logIndex=0 (no logs) then not applicable
+	if serverNextLogIndex > 1 {
+		args.LeaderPrevLogIndex = serverNextLogIndex - 1
+		args.LeaderPrevLogTerm = rf.logs[args.LeaderPrevLogIndex-1].Term
+	}
+
+	arr := rf.logs[args.LeaderPrevLogIndex:]
+	args.LeaderLogEntryLen = len(arr)
+	args.LeaderLogEntries = Compress(EncodeToBytes(arr))
+	rf.mu.Unlock()
 
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 
