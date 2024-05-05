@@ -28,6 +28,7 @@ func (rf *Raft) applyLogs() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	defer rf.persist()
+	rf.persist()
 	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
 		msg := ApplyMsg{
 			CommandValid: true,
@@ -115,8 +116,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // sendAppendEntry method: leader only
 // single non-heartbeat AppendEntries RPC
 // server (int) defines serverId RPC is for
-func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower chan bool) {
+func (rf *Raft) sendAppendEntry(server int) {
 	rf.mu.Lock()
+
 	reply := &AppendEntriesReply{}
 	args := &AppendEntriesArgs{
 		LeaderTerm:         rf.currentTerm,
@@ -148,26 +150,17 @@ func (rf *Raft) sendAppendEntry(server int, replicationChan chan int, isFollower
 		return
 	}
 
-	// if there is an error retry the reqeuest
 	if !ok || !reply.Recieved {
 		return
 	}
 
-	// if success, update servers matchIndex and nextIndex
-	// use prevLogIndex + # logs added if state has changed
-	// then pass vote to replication channel
 	if reply.Success {
 		rf.updateFollowerState(server, args.LeaderPrevLogIndex, args.LeaderLogEntryLen)
-		replicationChan <- 1
 		return
 	}
 
-	// the follower has a higher term
-	// convert leader to follower
-	// pass update to isFollower channel
 	if reply.Term > args.LeaderTerm {
 		rf.becomeFollower(reply.Term, false)
-		isFollower <- true
 		return
 	}
 
@@ -250,35 +243,15 @@ func (rf *Raft) findNextIndex(server int, cIndex int, cTerm int, cLen int) {
 
 // sendLogEntries: leader method
 // called by leader when client calls Start() and sends new log to all peers
-// for replication. successful if a majority of peers replicate the log
-// in-memory. the leader then updates it's commitIndex and processes logs
-// up to that new commitIndex. if leader is a follower it will be updated.
+// for replication.
 func (rf *Raft) sendLogEntries() {
 	if rf.getState() != Leader {
 		return
 	}
-	// numGoroutines := runtime.NumGoroutine()
-	// fmt.Printf("Number of Running Goroutines: %d\n", numGoroutines)
-	replicationCount := 1
-	replicationChan := make(chan int, rf.peerCount-1)
-	isFollower := make(chan bool, rf.peerCount-1)
 
 	for serverId := range rf.peerCount {
 		if serverId != rf.me {
-			go rf.sendAppendEntry(serverId, replicationChan, isFollower)
-		}
-	}
-
-	for range rf.peerCount - 1 {
-		select {
-		// determine quorum of logs sent to finalize commit
-		case outcome := <-replicationChan:
-			replicationCount += outcome
-			if replicationCount >= (rf.peerCount/2)+1 {
-				return
-			}
-		case <-isFollower:
-			return
+			go rf.sendAppendEntry(serverId)
 		}
 	}
 }

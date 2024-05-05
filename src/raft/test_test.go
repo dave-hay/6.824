@@ -10,7 +10,6 @@ package raft
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -816,7 +815,6 @@ func TestFigure8Unreliable2C(t *testing.T) {
 		}
 	}
 
-	log.Println("last entry")
 	cfg.one(rand.Int()%10000, servers, true)
 
 	cfg.end()
