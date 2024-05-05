@@ -81,7 +81,6 @@ type Raft struct {
 	state               State
 	applyCh             chan ApplyMsg
 	lastHeardFromLeader time.Time
-	logQueue            LogQueue
 
 	// leader only, volatile state
 	// contains information about follower servers
@@ -212,11 +211,9 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		nextIndex:   make([]int, len(peers)),
 		matchIndex:  make([]int, len(peers)),
 	}
-	rf.logQueue.cond = sync.NewCond(&sync.Mutex{})
 
 	// Your initialization code here (2A, 2B, 2C).
 	go rf.mainLoop()
-	go rf.logQueueConsumer()
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
@@ -236,8 +233,6 @@ type PersistentState struct {
 // save Raft's persistent state to stable storage,
 // where it can later be retrieved after a crash and restart.
 func (rf *Raft) persist() {
-	// Your code here (2C).
-	// Example:
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
 	e.Encode(PersistentState{
@@ -255,8 +250,6 @@ func (rf *Raft) readPersist(data []byte) {
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return
 	}
-	// Your code here (2C).
-	// Example:
 	r := bytes.NewBuffer(data)
 	d := labgob.NewDecoder(r)
 	var savedState PersistentState

@@ -54,6 +54,21 @@ func (rf *Raft) makeAppendEntriesArgs(server int) *AppendEntriesArgs {
 	return args
 }
 
+func (rf *Raft) applyLogs() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	defer rf.persist()
+	for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+		msg := ApplyMsg{
+			CommandValid: true,
+			Command:      rf.logs[i-1].Command,
+			CommandIndex: i,
+		}
+		rf.applyCh <- msg
+		rf.lastApplied = i
+	}
+}
+
 // AppendEntries RPC
 // called by follower invoked by current leader
 // for replicating log entries + heartbeats
@@ -123,8 +138,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	}
 
 	if rf.commitIndex > rf.lastApplied {
-		// go rf.applyLogs()
-		go rf.logQueueProducer(rf.commitIndex)
+		go rf.applyLogs()
 	}
 }
 
@@ -199,8 +213,7 @@ func (rf *Raft) updateFollowerState(server int, prevLogIndex int, logEntryLen in
 		rf.commitIndex = index
 	}
 
-	// go rf.applyLogs()
-	go rf.logQueueProducer(rf.commitIndex)
+	go rf.applyLogs()
 }
 
 // findNextIndex method: called by leader only;
@@ -270,8 +283,6 @@ func (rf *Raft) sendLogEntries() {
 		case outcome := <-replicationChan:
 			replicationCount += outcome
 			if replicationCount >= (rf.peerCount/2)+1 {
-				// rf.calculateCommitIndex()
-				// go rf.logQueueProducer(rf.commitIndex)
 				return
 			}
 		case <-isFollower:
