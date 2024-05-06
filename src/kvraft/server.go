@@ -44,8 +44,8 @@ type KVServer struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
-	db    *KVMap
-	queue *KVQueue
+	db      *KVMap
+	chanMap *KVChanMap
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
@@ -73,6 +73,16 @@ func (kv *KVServer) Kill() {
 func (kv *KVServer) killed() bool {
 	z := atomic.LoadInt32(&kv.dead)
 	return z == 1
+}
+
+func (kv *KVServer) applyChLoop() {
+	for m := range kv.applyCh {
+		if m.CommandValid == false {
+			continue
+		}
+		resp := kv.chanMap.get(m.Id)
+		resp <- true
+	}
 }
 
 // servers[] contains the ports of the set of
@@ -103,7 +113,8 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	// You may need initialization code here.
 	kv.db = makeKVMap()
-	kv.queue = makeKVQueue()
+	kv.chanMap = makeKVChanMap()
+	go kv.applyChLoop()
 
 	return kv
 }
