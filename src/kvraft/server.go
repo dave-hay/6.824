@@ -50,10 +50,66 @@ type KVServer struct {
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	// Your code here.
+	if args.Key == "" {
+		reply.Err = ErrNoKey
+		return
+	}
+
+	op := Op{
+		Id:     args.Id,
+		Method: "Get",
+		Key:    args.Key,
+	}
+
+	index, term, isLeader := kv.rf.Start(op)
+
+	if index == -1 && term == -1 && !isLeader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
+	idChan := kv.chanMap.add(args.Id)
+
+	// TODO: add timeout
+	<-idChan
+	reply.Value = kv.db.get(args.Key)
+	reply.Err = "OK"
+	kv.chanMap.del(args.Id)
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
+	if args.Key == "" {
+		reply.Err = ErrNoKey
+		return
+	}
+
+	op := Op{
+		Id:     args.Id,
+		Method: args.Op,
+		Key:    args.Key,
+		Value:  args.Value,
+	}
+
+	index, term, isLeader := kv.rf.Start(op)
+
+	if index == -1 && term == -1 && !isLeader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
+	idChan := kv.chanMap.add(args.Id)
+	// TODO: add timeout
+
+	<-idChan
+
+	if args.Op == "Put" {
+		kv.db.put(args.Key, args.Value)
+	} else {
+		kv.db.append(args.Key, args.Value)
+	}
+	reply.Err = "OK"
+	kv.chanMap.del(args.Id)
 }
 
 // the tester calls Kill() when a KVServer instance won't
