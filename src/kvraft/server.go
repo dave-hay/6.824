@@ -20,12 +20,18 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 }
 
 type Op struct {
+	Id     int64
 	Method string
 	Key    string
 	Value  string
 	// Your definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+}
+
+// so raft can get ID
+func (op *Op) GetId() int64 {
+	return op.Id
 }
 
 type KVServer struct {
