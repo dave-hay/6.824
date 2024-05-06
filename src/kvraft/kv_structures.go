@@ -40,30 +40,48 @@ type Resp struct {
 	Err  chan Err
 }
 
+type ItemStatus int
+
+const (
+	DNE ItemStatus = iota
+	NEW
+	PROCESSING
+	COMPLETED
+)
+
+type ChanMapEntry struct {
+	ch     chan bool
+	status ItemStatus
+}
+
 type KVChanMap struct {
 	mu    sync.Mutex
-	items map[int64]chan bool
+	items map[int64]ChanMapEntry
 }
 
 func makeKVChanMap() *KVChanMap {
-	return &KVChanMap{}
+	return &KVChanMap{items: make(map[int64]ChanMapEntry)}
 }
 
-func (kvm *KVChanMap) get(key int64) chan bool {
+func (kvm *KVChanMap) get(key int64) ChanMapEntry {
 	kvm.mu.Lock()
 	defer kvm.mu.Unlock()
 	return kvm.items[key]
 }
 
-func (kvm *KVChanMap) add(key int64) chan bool {
+func (kvm *KVChanMap) add(key int64) ChanMapEntry {
 	kvm.mu.Lock()
 	defer kvm.mu.Unlock()
-	kvm.items[key] = make(chan bool, 1)
+	val, ok := kvm.items[key]
+	if ok {
+		return val
+	}
+	kvm.items[key] = ChanMapEntry{ch: make(chan bool, 1), status: NEW}
 	return kvm.items[key]
 }
 
 func (kvm *KVChanMap) del(key int64) {
 	kvm.mu.Lock()
 	defer kvm.mu.Unlock()
-	delete(kvm.items, key)
+	kvm.items[key] = ChanMapEntry{status: COMPLETED}
 }
