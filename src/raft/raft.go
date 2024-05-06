@@ -112,6 +112,12 @@ func (rf *Raft) getState() State {
 	return rf.state
 }
 
+func (rf *Raft) GetLeaderId() int {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	return rf.leaderId
+}
+
 func (rf *Raft) getTimeLastHeardFromLeader() time.Time {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
