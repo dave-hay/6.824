@@ -148,6 +148,7 @@ func (rf *Raft) startElection() {
 func (rf *Raft) becomeCandidate() {
 	rf.currentTerm++
 	rf.state = Candidate
+	rf.leaderId = -1
 	rf.lastHeardFromLeader = time.Now()
 }
 
@@ -159,6 +160,7 @@ func (rf *Raft) becomeLeader() {
 	DPrint(rf.me, "becomeLeader", "called")
 	rf.mu.Lock()
 	rf.state = Leader
+	rf.leaderId = rf.me
 	val := len(rf.logs) + 1 // last log index + 1
 
 	for i := range rf.peerCount {
@@ -183,6 +185,7 @@ func (rf *Raft) becomeFollower(currentTerm int, restartTimer bool) {
 	rf.votedFor = -1
 	rf.state = Follower
 	rf.currentTerm = currentTerm
+	rf.leaderId = -1
 	if restartTimer {
 		rf.lastHeardFromLeader = time.Now()
 	}

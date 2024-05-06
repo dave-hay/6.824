@@ -67,6 +67,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.currentTerm = args.LeaderTerm
 	reply.Term = args.LeaderTerm
 	reply.Success = true
+	rf.leaderId = args.LeaderId
 
 	// decrement nextIndex
 	if args.LeaderPrevLogIndex > len(rf.logs) {
@@ -163,6 +164,7 @@ func (rf *Raft) sendAppendEntry(server int, args *AppendEntriesArgs, reply *Appe
 		rf.votedFor = -1
 		rf.state = Follower
 		rf.currentTerm = reply.Term
+		rf.leaderId = -1
 		return
 	}
 

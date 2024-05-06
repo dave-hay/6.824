@@ -81,6 +81,7 @@ type Raft struct {
 	state               State
 	applyCh             chan ApplyMsg
 	lastHeardFromLeader time.Time
+	leaderId            int
 
 	// leader only, volatile state
 	// contains information about follower servers
@@ -206,6 +207,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		currentTerm: 0,
 		commitIndex: 0,
 		lastApplied: 0,
+		leaderId:    -1,
 		applyCh:     applyCh,
 		peerCount:   len(peers),
 		nextIndex:   make([]int, len(peers)),
