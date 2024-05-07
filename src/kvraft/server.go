@@ -148,7 +148,7 @@ func (kv *KVServer) killed() bool {
 
 func (kv *KVServer) applyChLoop() {
 	for m := range kv.applyCh {
-		if m.CommandValid == false {
+		if !m.CommandValid {
 			continue
 		}
 		resp := kv.chanMap.get(m.Id)

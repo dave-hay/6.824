@@ -96,6 +96,38 @@ func (ck *Clerk) sendGet(server int, args *GetArgs, reply *GetReply) {
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
+
+	if key == "" {
+		return
+	}
+
+	id := nrand()
+	args := &PutAppendArgs{Id: id, Key: key, Value: value, Op: op}
+	reply := &PutAppendReply{}
+
+	for {
+		leader := ck.getLeaderId()
+		ck.sendPutAppend(leader, args, reply)
+		switch reply.Err {
+		case ErrNoKey:
+			args.Key = key
+		case ErrWrongLeader:
+			ck.setLeaderId(reply.LeaderId)
+		case ErrNetwork:
+			continue
+		default:
+			// OK or ErrExecuted
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// want to know if success or if it needs to be called again
+func (ck *Clerk) sendPutAppend(server int, args *PutAppendArgs, reply *PutAppendReply) {
+	if ok := ck.servers[server].Call("KVServer.Get", args, reply); !ok {
+		reply.Err = ErrNetwork
+	}
 }
 
 func (ck *Clerk) Put(key string, value string) {
