@@ -41,12 +41,14 @@ import (
 // snapshots) on the applyCh; at that point you can add fields to
 // ApplyMsg, but set CommandValid to false for these other uses.
 type ApplyMsg struct {
+	Id           int64
 	CommandValid bool // true if contains newly commited log entry
 	Command      interface{}
 	CommandIndex int
 }
 
 type LogEntry struct {
+	Id      int64
 	Term    int
 	Command interface{}
 }
@@ -171,6 +173,10 @@ func (rf *Raft) mainLoop() {
 	DPrintf("raft %d: died", rf.me)
 }
 
+type IdGetter interface {
+	GetId() int64
+}
+
 // Start()
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log.
@@ -188,7 +194,13 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		return -1, -1, false
 	}
 
-	rf.logs = append(rf.logs, LogEntry{Term: rf.currentTerm, Command: command}) // append command to log
+	newEntry := LogEntry{Term: rf.currentTerm, Command: command}
+
+	if idGetter, ok := command.(IdGetter); ok {
+		newEntry.Id = idGetter.GetId()
+	}
+
+	rf.logs = append(rf.logs, newEntry) // append command to log
 
 	return len(rf.logs), rf.currentTerm, true
 }
