@@ -43,8 +43,7 @@ type Resp struct {
 type ItemStatus int
 
 const (
-	DNE ItemStatus = iota
-	NEW
+	NEW ItemStatus = iota
 	PROCESSING
 	COMPLETED
 )
@@ -69,13 +68,16 @@ func (kvm *KVChanMap) get(key int64) ChanMapEntry {
 	return kvm.items[key]
 }
 
+func (kvm *KVChanMap) contains(key int64) bool {
+	kvm.mu.Lock()
+	defer kvm.mu.Unlock()
+	_, ok := kvm.items[key]
+	return ok
+}
+
 func (kvm *KVChanMap) add(key int64) ChanMapEntry {
 	kvm.mu.Lock()
 	defer kvm.mu.Unlock()
-	val, ok := kvm.items[key]
-	if ok {
-		return val
-	}
 	kvm.items[key] = ChanMapEntry{ch: make(chan bool, 1), status: NEW}
 	return kvm.items[key]
 }
@@ -83,5 +85,13 @@ func (kvm *KVChanMap) add(key int64) ChanMapEntry {
 func (kvm *KVChanMap) del(key int64) {
 	kvm.mu.Lock()
 	defer kvm.mu.Unlock()
-	kvm.items[key] = ChanMapEntry{status: COMPLETED}
+	delete(kvm.items, key)
+}
+
+func (kvm *KVChanMap) setStatus(key int64, status ItemStatus) {
+	kvm.mu.Lock()
+	defer kvm.mu.Unlock()
+	item := kvm.items[key]
+	item.status = status
+	kvm.items[key] = item
 }

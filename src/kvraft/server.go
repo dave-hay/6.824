@@ -61,19 +61,27 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		Key:    args.Key,
 	}
 
-	index, term, isLeader := kv.rf.Start(op)
-
-	if index == -1 && term == -1 && !isLeader {
-		reply.Err = ErrWrongLeader
+	if kv.chanMap.contains(args.Id) {
+		reply.Err = ErrExecuted
 		return
 	}
 
-	idChan := kv.chanMap.add(args.Id)
+	entry := kv.chanMap.add(args.Id)
+	index, term, isLeader := kv.rf.Start(op)
+
+	if index == -1 && term == -1 && !isLeader {
+		// can optimize by not deleting and having check on add
+		kv.chanMap.del(args.Id)
+		reply.Err = ErrWrongLeader
+		reply.LeaderId = kv.rf.GetLeaderId()
+		return
+	}
 
 	// TODO: add timeout
-	<-idChan
+
+	// wait until raft sends applyCh
+	<-entry.ch
 	reply.Value = kv.db.get(args.Key)
-	reply.Err = "OK"
 	kv.chanMap.del(args.Id)
 }
 
@@ -91,24 +99,31 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		Value:  args.Value,
 	}
 
-	index, term, isLeader := kv.rf.Start(op)
-
-	if index == -1 && term == -1 && !isLeader {
-		reply.Err = ErrWrongLeader
+	if kv.chanMap.contains(args.Id) {
+		reply.Err = ErrExecuted
 		return
 	}
 
-	idChan := kv.chanMap.add(args.Id)
+	entry := kv.chanMap.add(args.Id)
+	index, term, isLeader := kv.rf.Start(op)
+
+	if index == -1 && term == -1 && !isLeader {
+		// can optimize by not deleting and having check on add
+		kv.chanMap.del(args.Id)
+		reply.Err = ErrWrongLeader
+		reply.LeaderId = kv.rf.GetLeaderId()
+		return
+	}
+
 	// TODO: add timeout
 
-	<-idChan
+	<-entry.ch
 
 	if args.Op == "Put" {
 		kv.db.put(args.Key, args.Value)
 	} else {
 		kv.db.append(args.Key, args.Value)
 	}
-	reply.Err = "OK"
 	kv.chanMap.del(args.Id)
 }
 
@@ -137,7 +152,7 @@ func (kv *KVServer) applyChLoop() {
 			continue
 		}
 		resp := kv.chanMap.get(m.Id)
-		resp <- true
+		resp.ch <- true
 	}
 }
 
