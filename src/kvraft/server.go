@@ -49,6 +49,8 @@ type KVServer struct {
 	// Your definitions here.
 	db      map[string]string
 	chanMap *KVChanMap
+
+	deadCh chan struct{}
 }
 
 func getTimeout() time.Duration {
@@ -67,7 +69,6 @@ func (kv *KVServer) getDB(key string) string {
 	if val, ok := kv.db[key]; ok {
 		return val
 	}
-
 	return ""
 }
 
@@ -176,6 +177,7 @@ func (kv *KVServer) Kill() {
 	atomic.StoreInt32(&kv.dead, 1)
 	kv.rf.Kill()
 	// Your code here, if desired.
+	close(kv.deadCh)
 }
 
 func (kv *KVServer) killed() bool {
@@ -230,8 +232,10 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	// You may need initialization code here.
+	kv.deadCh = make(chan struct{})
 	kv.db = make(map[string]string)
 	kv.chanMap = makeKVChanMap()
+
 	go kv.applyChLoop()
 
 	return kv

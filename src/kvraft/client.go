@@ -100,7 +100,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 
 	for {
 		reply := &PutAppendReply{}
-		ok := ck.servers[leaderId].Call("KVServer.Get", args, reply)
+		ok := ck.servers[leaderId].Call("KVServer.PutAppend", args, reply)
 
 		if ok && reply.Err == OK {
 			ck.setLeaderId(leaderId)
