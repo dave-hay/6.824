@@ -125,7 +125,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 
 // want to know if success or if it needs to be called again
 func (ck *Clerk) sendPutAppend(server int, args *PutAppendArgs, reply *PutAppendReply) {
-	if ok := ck.servers[server].Call("KVServer.Get", args, reply); !ok {
+	if ok := ck.servers[server].Call("KVServer.PutAppend", args, reply); !ok {
 		reply.Err = ErrNetwork
 	}
 }

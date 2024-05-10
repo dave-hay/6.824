@@ -49,6 +49,7 @@ type KVServer struct {
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
+	DPrintf("Get called")
 	// Your code here.
 	if args.Key == "" {
 		reply.Err = ErrNoKey
@@ -86,6 +87,7 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
+	DPrintf("PutAppend called")
 	// Your code here.
 	if args.Key == "" {
 		reply.Err = ErrNoKey
@@ -108,15 +110,17 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	index, term, isLeader := kv.rf.Start(op)
 
 	if index == -1 && term == -1 && !isLeader {
+		DPrintf("PutAppend not leader")
 		// can optimize by not deleting and having check on add
 		kv.chanMap.del(args.Id)
 		reply.Err = ErrWrongLeader
-		reply.LeaderId = kv.rf.GetLeaderId()
+		reply.LeaderId = max(kv.rf.GetLeaderId(), 0)
 		return
 	}
 
 	// TODO: add timeout
 
+	DPrintf("PutAppend waiting on chan")
 	<-entry.ch
 
 	if args.Op == "Put" {
@@ -148,6 +152,7 @@ func (kv *KVServer) killed() bool {
 
 func (kv *KVServer) applyChLoop() {
 	for m := range kv.applyCh {
+		DPrintf("PutAppend recieved applyCh")
 		if !m.CommandValid {
 			continue
 		}
