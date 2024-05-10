@@ -24,8 +24,6 @@ type PutAppendArgs struct {
 
 type PutAppendReply struct {
 	Err      Err
-	LeaderId int
-	Term     int
 }
 
 type GetArgs struct {
@@ -37,6 +35,4 @@ type GetArgs struct {
 type GetReply struct {
 	Err      Err
 	Value    string
-	LeaderId int
-	Term     int
 }

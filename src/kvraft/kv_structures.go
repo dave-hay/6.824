@@ -28,34 +28,16 @@ func (kvm *KVMap) get(key string) string {
 	return kvm.items[key]
 }
 
-type Resp struct {
-	Data chan string
-	Err  chan Err
-}
-
-type ItemStatus int
-
-const (
-	NEW ItemStatus = iota
-	PROCESSING
-	COMPLETED
-)
-
-type ChanMapEntry struct {
-	ch     chan bool
-	status ItemStatus
-}
-
 type KVChanMap struct {
 	mu    sync.Mutex
-	items map[int64]ChanMapEntry
+	items map[int64]chan Op
 }
 
 func makeKVChanMap() *KVChanMap {
-	return &KVChanMap{items: make(map[int64]ChanMapEntry)}
+	return &KVChanMap{items: make(map[int64]chan Op)}
 }
 
-func (kvm *KVChanMap) get(key int64) ChanMapEntry {
+func (kvm *KVChanMap) get(key int64) chan Op {
 	kvm.mu.Lock()
 	defer kvm.mu.Unlock()
 	DPrintf("get items[key](%d): %v", key, kvm.items[key])
@@ -70,11 +52,11 @@ func (kvm *KVChanMap) contains(key int64) bool {
 	return ok
 }
 
-func (kvm *KVChanMap) add(key int64) ChanMapEntry {
+func (kvm *KVChanMap) add(key int64) chan Op {
 	kvm.mu.Lock()
 	defer kvm.mu.Unlock()
 	DPrintf("adding key: %d", key)
-	kvm.items[key] = ChanMapEntry{ch: make(chan bool, 1), status: NEW}
+	kvm.items[key] = make(chan Op, 1)
 	return kvm.items[key]
 }
 

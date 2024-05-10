@@ -51,36 +51,46 @@ type KVServer struct {
 	chanMap *KVChanMap
 }
 
-func (kv *KVServer) getTimeout() time.Duration {
+func getTimeout() time.Duration {
 	return time.Duration(800) * time.Millisecond
 }
 
-func (kv *KVServer) checkArgs(args *GetArgs, reply *GetReply) {
-	reply.LeaderId = kv.rf.GetLeaderId()
+func monitor(ch chan Op) Op {
+	select {
+	case op := <-ch:
+		return op
+	case <-time.After(getTimeout()):
+		return Op{}
+	}
+}
 
-	if kv.me != reply.LeaderId {
-		reply.Err = ErrWrongLeader
-		return
+func opsEqual(op, commitedOp Op) bool {
+	return (op.Id == commitedOp.Id &&
+		op.Method == commitedOp.Method &&
+		op.Key == commitedOp.Key &&
+		op.Value == commitedOp.Value)
+}
+
+func (kv *KVServer) checkArgs(id int64, key string) Err {
+	var err Err
+	err = OK
+
+	if key == "" {
+		err = ErrNoKey
+	} else if kv.chanMap.contains(id) {
+		err = ErrExecuted
 	}
 
-	if args.Key == "" {
-		reply.Err = ErrNoKey
-		return
-	}
-
-	if kv.chanMap.contains(args.Id) {
-		reply.Err = ErrExecuted
-		return
-	}
-
+	return err
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	DPrintf("Get called")
 	// Your code here.
-	kv.checkArgs(args, reply)
+	reply.Err = ErrWrongLeader
 
-	if reply.Err != OK {
+	if err := kv.checkArgs(args.Id, args.Key); err != OK {
+		reply.Err = err
 		return
 	}
 
@@ -90,49 +100,29 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		Key:    args.Key,
 	}
 
-	entry := kv.chanMap.add(args.Id)
-	index, term, _ := kv.rf.Start(op)
+	opChan := kv.chanMap.add(args.Id)
 
-	select {
-	case <-entry.ch:
-		// update database
-		val := kv.db.get(args.Key)
-		reply.Value = val
-		kv.chanMap.del(args.Id)
-		kv.mu.Lock()
-		kv.index = index
-		kv.term = term
-		kv.mu.Unlock()
-	case <-time.After(kv.getTimeout()):
-		reply.Err = ErrTimeout
-	}
-}
+	_, _, isLeader := kv.rf.Start(op)
 
-func (kv *KVServer) checkPutAppendArgs(args *PutAppendArgs, reply *PutAppendReply) {
-	reply.LeaderId = kv.rf.GetLeaderId()
-
-	if kv.me != reply.LeaderId {
+	if !isLeader {
 		reply.Err = ErrWrongLeader
 		return
 	}
 
-	if args.Key == "" {
-		reply.Err = ErrNoKey
-		return
-	}
-
-	if kv.chanMap.contains(args.Id) {
-		reply.Err = ErrExecuted
-		return
+	commitedOp := monitor(opChan)
+	if opsEqual(op, commitedOp) {
+		reply.Err = OK
+		reply.Value = kv.db.get(op.Key)
 	}
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	DPrintf("PutAppend called")
 	// Your code here.
-	kv.checkPutAppendArgs(args, reply)
+	reply.Err = ErrWrongLeader
 
-	if reply.Err != OK {
+	if err := kv.checkArgs(args.Id, args.Key); err != OK {
+		reply.Err = err
 		return
 	}
 
@@ -143,21 +133,18 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		Value:  args.Value,
 	}
 
-	entry := kv.chanMap.add(args.Id)
+	opChan := kv.chanMap.add(args.Id)
 
-	index, term, _ := kv.rf.Start(op)
+	_, _, isLeader := kv.rf.Start(op)
 
-	select {
-	case <-entry.ch:
-		// update database
-		kv.db.putAppend(args.Op, args.Key, args.Value)
-		kv.chanMap.del(args.Id)
-		kv.mu.Lock()
-		kv.index = index
-		kv.term = term
-		kv.mu.Unlock()
-	case <-time.After(kv.getTimeout()):
-		reply.Err = ErrTimeout
+	if !isLeader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
+	commitedOp := monitor(opChan)
+	if opsEqual(op, commitedOp) {
+		reply.Err = OK
 	}
 }
 
