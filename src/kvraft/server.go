@@ -173,8 +173,17 @@ func (kv *KVServer) applyChLoop() {
 		if !m.CommandValid {
 			continue
 		}
-		resp := kv.chanMap.get(m.Id)
-		resp.ch <- true
+
+		op := m.Command.(Op)
+
+		// do operation
+		kv.db.putAppend(op.Method, op.Key, op.Value)
+
+		// send to chan or ignore
+		if ok := kv.chanMap.contains(op.Id); ok {
+			respCh := kv.chanMap.get(op.Id)
+			respCh <- op
+		}
 	}
 }
 
