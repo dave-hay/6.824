@@ -11,31 +11,21 @@ func makeKVMap() *KVMap {
 	return &KVMap{}
 }
 
+func (kvm *KVMap) putAppend(oper, key, val string) {
+	kvm.mu.Lock()
+	defer kvm.mu.Unlock()
+	if oper == "Put" {
+		kvm.items[key] = val
+	} else if oper == "Append" {
+		kvm.items[key] += val
+	}
+}
+
 func (kvm *KVMap) get(key string) string {
 	kvm.mu.Lock()
 	defer kvm.mu.Unlock()
 	DPrintf("DB get key: %s", key)
 	return kvm.items[key]
-}
-
-func (kvm *KVMap) put(key string, val string) {
-	kvm.mu.Lock()
-	defer kvm.mu.Unlock()
-	DPrintf("DB put key: %s, val: %s", key, val)
-	kvm.items[key] = val
-}
-
-func (kvm *KVMap) append(key string, val string) {
-	kvm.mu.Lock()
-	defer kvm.mu.Unlock()
-	DPrintf("DB put key: %s, val: %s", key, val)
-	kvm.items[key] += val
-}
-
-func (kvm *KVMap) del(key string) {
-	kvm.mu.Lock()
-	defer kvm.mu.Unlock()
-	delete(kvm.items, key)
 }
 
 type Resp struct {
