@@ -68,6 +68,7 @@ func (ck *Clerk) Get(key string) string {
 		ok := ck.servers[leaderId].Call("KVServer.Get", args, reply)
 
 		if ok && reply.Err == OK {
+			DPrintf("Client success get: %s\n", reply.Value)
 			ck.setLeaderId(leaderId)
 			return reply.Value
 		}
@@ -103,6 +104,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		ok := ck.servers[leaderId].Call("KVServer.PutAppend", args, reply)
 
 		if ok && reply.Err == OK {
+			DPrintf("Client success PutAppend\n")
 			ck.setLeaderId(leaderId)
 			return
 		}

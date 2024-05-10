@@ -49,8 +49,6 @@ type KVServer struct {
 	// Your definitions here.
 	db      map[string]string
 	chanMap *KVChanMap
-
-	deadCh chan struct{}
 }
 
 func getTimeout() time.Duration {
@@ -58,6 +56,8 @@ func getTimeout() time.Duration {
 }
 
 func (kv *KVServer) putAppendDB(oper, key, val string) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
 	if oper == "Put" {
 		kv.db[key] = val
 	} else if oper == "Append" {
@@ -66,6 +66,8 @@ func (kv *KVServer) putAppendDB(oper, key, val string) {
 }
 
 func (kv *KVServer) getDB(key string) string {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
 	if val, ok := kv.db[key]; ok {
 		return val
 	}
@@ -73,10 +75,13 @@ func (kv *KVServer) getDB(key string) string {
 }
 
 func monitor(ch chan Op) Op {
+	DPrintf("monitor called\n")
 	select {
 	case op := <-ch:
+		DPrintf("monitor returning op\n")
 		return op
 	case <-time.After(getTimeout()):
+		DPrintf("monitor timedout\n")
 		return Op{}
 	}
 }
@@ -88,28 +93,10 @@ func opsEqual(op, commitedOp Op) bool {
 		op.Value == commitedOp.Value)
 }
 
-func (kv *KVServer) checkArgs(id int64, key string) Err {
-	var err Err
-	err = OK
-
-	if key == "" {
-		err = ErrNoKey
-	} else if kv.chanMap.contains(id) {
-		err = ErrExecuted
-	}
-
-	return err
-}
-
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	DPrintf("Get called")
 	// Your code here.
 	reply.Err = ErrWrongLeader
-
-	if err := kv.checkArgs(args.Id, args.Key); err != OK {
-		reply.Err = err
-		return
-	}
 
 	op := Op{
 		Id:     args.Id,
@@ -122,7 +109,6 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	_, _, isLeader := kv.rf.Start(op)
 
 	if !isLeader {
-		reply.Err = ErrWrongLeader
 		return
 	}
 
@@ -134,14 +120,9 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-	DPrintf("PutAppend called")
+	DPrintf("PutAppend called\n")
 	// Your code here.
 	reply.Err = ErrWrongLeader
-
-	if err := kv.checkArgs(args.Id, args.Key); err != OK {
-		reply.Err = err
-		return
-	}
 
 	op := Op{
 		Id:     args.Id,
@@ -155,7 +136,7 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	_, _, isLeader := kv.rf.Start(op)
 
 	if !isLeader {
-		reply.Err = ErrWrongLeader
+		DPrintf("server not leader\n")
 		return
 	}
 
@@ -177,7 +158,6 @@ func (kv *KVServer) Kill() {
 	atomic.StoreInt32(&kv.dead, 1)
 	kv.rf.Kill()
 	// Your code here, if desired.
-	close(kv.deadCh)
 }
 
 func (kv *KVServer) killed() bool {
@@ -186,8 +166,9 @@ func (kv *KVServer) killed() bool {
 }
 
 func (kv *KVServer) applyChLoop() {
-	for m := range kv.applyCh {
-		DPrintf("PutAppend recieved applyCh")
+	for !kv.killed() {
+		m := <-kv.applyCh
+		DPrintf("PutAppend recieved applyCh\n")
 		if !m.CommandValid {
 			continue
 		}
@@ -232,7 +213,6 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	// You may need initialization code here.
-	kv.deadCh = make(chan struct{})
 	kv.db = make(map[string]string)
 	kv.chanMap = makeKVChanMap()
 
