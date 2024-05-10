@@ -4,6 +4,7 @@ import (
 	"log"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"6.824/labgob"
 	"6.824/labrpc"
@@ -42,6 +43,8 @@ type KVServer struct {
 	dead    int32 // set by Kill()
 
 	maxraftstate int // snapshot if log grows this big
+	index        int
+	term         int
 
 	// Your definitions here.
 	db      *KVMap
@@ -53,6 +56,13 @@ func (kv *KVServer) getTimeout() time.Duration {
 }
 
 func (kv *KVServer) checkArgs(args *GetArgs, reply *GetReply) {
+	reply.LeaderId = kv.rf.GetLeaderId()
+
+	if kv.me != reply.LeaderId {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
 	if args.Key == "" {
 		reply.Err = ErrNoKey
 		return
@@ -63,18 +73,14 @@ func (kv *KVServer) checkArgs(args *GetArgs, reply *GetReply) {
 		return
 	}
 
-	leaderId := kv.rf.GetLeaderId()
-	if kv.me != leaderId {
-		reply.Err = ErrWrongLeader
-		reply.LeaderId = leaderId
-	}
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	DPrintf("Get called")
 	// Your code here.
-	if args.Key == "" {
-		reply.Err = ErrNoKey
+	kv.checkArgs(args, reply)
+
+	if reply.Err != OK {
 		return
 	}
 
@@ -84,35 +90,49 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		Key:    args.Key,
 	}
 
+	entry := kv.chanMap.add(args.Id)
+	index, term, _ := kv.rf.Start(op)
+
+	select {
+	case <-entry.ch:
+		// update database
+		val := kv.db.get(args.Key)
+		reply.Value = val
+		kv.chanMap.del(args.Id)
+		kv.mu.Lock()
+		kv.index = index
+		kv.term = term
+		kv.mu.Unlock()
+	case <-time.After(kv.getTimeout()):
+		reply.Err = ErrTimeout
+	}
+}
+
+func (kv *KVServer) checkPutAppendArgs(args *PutAppendArgs, reply *PutAppendReply) {
+	reply.LeaderId = kv.rf.GetLeaderId()
+
+	if kv.me != reply.LeaderId {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
+	if args.Key == "" {
+		reply.Err = ErrNoKey
+		return
+	}
+
 	if kv.chanMap.contains(args.Id) {
 		reply.Err = ErrExecuted
 		return
 	}
-
-	entry := kv.chanMap.add(args.Id)
-	index, term, isLeader := kv.rf.Start(op)
-
-	if index == -1 && term == -1 && !isLeader {
-		// can optimize by not deleting and having check on add
-		kv.chanMap.del(args.Id)
-		reply.Err = ErrWrongLeader
-		reply.LeaderId = kv.rf.GetLeaderId()
-		return
-	}
-
-	// TODO: add timeout
-
-	// wait until raft sends applyCh
-	<-entry.ch
-	reply.Value = kv.db.get(args.Key)
-	kv.chanMap.del(args.Id)
 }
 
 func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	DPrintf("PutAppend called")
 	// Your code here.
-	if args.Key == "" {
-		reply.Err = ErrNoKey
+	kv.checkPutAppendArgs(args, reply)
+
+	if reply.Err != OK {
 		return
 	}
 
@@ -123,34 +143,22 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 		Value:  args.Value,
 	}
 
-	if kv.chanMap.contains(args.Id) {
-		reply.Err = ErrExecuted
-		return
-	}
-
 	entry := kv.chanMap.add(args.Id)
-	index, term, isLeader := kv.rf.Start(op)
 
-	if index == -1 && term == -1 && !isLeader {
-		DPrintf("PutAppend not leader")
-		// can optimize by not deleting and having check on add
+	index, term, _ := kv.rf.Start(op)
+
+	select {
+	case <-entry.ch:
+		// update database
+		kv.db.putAppend(args.Op, args.Key, args.Value)
 		kv.chanMap.del(args.Id)
-		reply.Err = ErrWrongLeader
-		reply.LeaderId = max(kv.rf.GetLeaderId(), 0)
-		return
+		kv.mu.Lock()
+		kv.index = index
+		kv.term = term
+		kv.mu.Unlock()
+	case <-time.After(kv.getTimeout()):
+		reply.Err = ErrTimeout
 	}
-
-	// TODO: add timeout
-
-	DPrintf("PutAppend waiting on chan")
-	<-entry.ch
-
-	if args.Op == "Put" {
-		kv.db.put(args.Key, args.Value)
-	} else {
-		kv.db.append(args.Key, args.Value)
-	}
-	kv.chanMap.del(args.Id)
 }
 
 // the tester calls Kill() when a KVServer instance won't
