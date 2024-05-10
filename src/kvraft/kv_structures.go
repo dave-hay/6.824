@@ -2,32 +2,6 @@ package kvraft
 
 import "sync"
 
-type KVMap struct {
-	mu    sync.Mutex
-	items map[string]string
-}
-
-func makeKVMap() *KVMap {
-	return &KVMap{}
-}
-
-func (kvm *KVMap) putAppend(oper, key, val string) {
-	kvm.mu.Lock()
-	defer kvm.mu.Unlock()
-	if oper == "Put" {
-		kvm.items[key] = val
-	} else if oper == "Append" {
-		kvm.items[key] += val
-	}
-}
-
-func (kvm *KVMap) get(key string) string {
-	kvm.mu.Lock()
-	defer kvm.mu.Unlock()
-	DPrintf("DB get key: %s", key)
-	return kvm.items[key]
-}
-
 type KVChanMap struct {
 	mu    sync.Mutex
 	items map[int64]chan Op

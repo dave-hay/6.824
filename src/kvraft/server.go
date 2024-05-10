@@ -43,16 +43,32 @@ type KVServer struct {
 	dead    int32 // set by Kill()
 
 	maxraftstate int // snapshot if log grows this big
-	index        int
-	term         int
+	// index        int
+	// term         int
 
 	// Your definitions here.
-	db      *KVMap
+	db      map[string]string
 	chanMap *KVChanMap
 }
 
 func getTimeout() time.Duration {
 	return time.Duration(800) * time.Millisecond
+}
+
+func (kv *KVServer) putAppendDB(oper, key, val string) {
+	if oper == "Put" {
+		kv.db[key] = val
+	} else if oper == "Append" {
+		kv.db[key] += val
+	}
+}
+
+func (kv *KVServer) getDB(key string) string {
+	if val, ok := kv.db[key]; ok {
+		return val
+	}
+
+	return ""
 }
 
 func monitor(ch chan Op) Op {
@@ -112,7 +128,7 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	commitedOp := monitor(opChan)
 	if opsEqual(op, commitedOp) {
 		reply.Err = OK
-		reply.Value = kv.db.get(op.Key)
+		reply.Value = kv.getDB(op.Key)
 	}
 }
 
@@ -177,7 +193,7 @@ func (kv *KVServer) applyChLoop() {
 		op := m.Command.(Op)
 
 		// do operation
-		kv.db.putAppend(op.Method, op.Key, op.Value)
+		kv.putAppendDB(op.Method, op.Key, op.Value)
 
 		// send to chan or ignore
 		if ok := kv.chanMap.contains(op.Id); ok {
@@ -214,7 +230,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	// You may need initialization code here.
-	kv.db = makeKVMap()
+	kv.db = make(map[string]string)
 	kv.chanMap = makeKVChanMap()
 	go kv.applyChLoop()
 
