@@ -57,33 +57,25 @@ func (ck *Clerk) Get(key string) string {
 	if key == "" {
 		return ""
 	}
+
+	leaderId := ck.getLeaderId()
+
 	id := nrand()
 	args := &GetArgs{Id: id, Key: key}
-	reply := &GetReply{}
 
 	for {
-		leader := ck.getLeaderId()
-		ck.sendGet(leader, args, reply)
-		switch reply.Err {
-		case OK:
+		reply := &GetReply{}
+		ok := ck.servers[leaderId].Call("KVServer.Get", args, reply)
+
+		if ok && reply.Err == OK {
+			ck.setLeaderId(leaderId)
 			return reply.Value
-		case ErrNoKey:
-			args.Key = key
-		case ErrWrongLeader:
-			ck.setLeaderId(reply.LeaderId)
-		case ErrExecuted:
-			return ""
 		}
-		time.Sleep(10 * time.Millisecond)
+
+		leaderId = (leaderId + 1) % len(ck.servers)
+		time.Sleep(100 * time.Millisecond)
 	}
 
-}
-
-// want to know if success or if it needs to be called again
-func (ck *Clerk) sendGet(server int, args *GetArgs, reply *GetReply) {
-	if ok := ck.servers[server].Call("KVServer.Get", args, reply); !ok {
-		reply.Err = ErrNetwork
-	}
 }
 
 // shared by Put and Append.
@@ -103,30 +95,20 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 
 	id := nrand()
 	args := &PutAppendArgs{Id: id, Key: key, Value: value, Op: op}
-	reply := &PutAppendReply{}
+
+	leaderId := ck.getLeaderId()
 
 	for {
-		leader := ck.getLeaderId()
-		ck.sendPutAppend(leader, args, reply)
-		switch reply.Err {
-		case ErrNoKey:
-			args.Key = key
-		case ErrWrongLeader:
-			ck.setLeaderId(reply.LeaderId)
-		case ErrNetwork:
-			continue
-		default:
-			// OK or ErrExecuted
+		reply := &PutAppendReply{}
+		ok := ck.servers[leaderId].Call("KVServer.Get", args, reply)
+
+		if ok && reply.Err == OK {
+			ck.setLeaderId(leaderId)
 			return
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
 
-// want to know if success or if it needs to be called again
-func (ck *Clerk) sendPutAppend(server int, args *PutAppendArgs, reply *PutAppendReply) {
-	if ok := ck.servers[server].Call("KVServer.PutAppend", args, reply); !ok {
-		reply.Err = ErrNetwork
+		leaderId = (leaderId + 1) % len(ck.servers)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
