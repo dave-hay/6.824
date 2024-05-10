@@ -48,6 +48,28 @@ type KVServer struct {
 	chanMap *KVChanMap
 }
 
+func (kv *KVServer) getTimeout() time.Duration {
+	return time.Duration(800) * time.Millisecond
+}
+
+func (kv *KVServer) checkArgs(args *GetArgs, reply *GetReply) {
+	if args.Key == "" {
+		reply.Err = ErrNoKey
+		return
+	}
+
+	if kv.chanMap.contains(args.Id) {
+		reply.Err = ErrExecuted
+		return
+	}
+
+	leaderId := kv.rf.GetLeaderId()
+	if kv.me != leaderId {
+		reply.Err = ErrWrongLeader
+		reply.LeaderId = leaderId
+	}
+}
+
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 	DPrintf("Get called")
 	// Your code here.
